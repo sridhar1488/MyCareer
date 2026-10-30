@@ -1,0 +1,4 @@
+import type {components} from '../../api/schema';
+export function ScoreSummary({score}: {score:components['schemas']['ScoreResult']}) {
+  return <section className="panel score-summary"><h2>Calculated performance score</h2><div className="table-scroll"><table><thead><tr><th>Section</th><th>Rated items</th><th>Average</th><th>Weight</th><th>Weighted score</th></tr></thead><tbody>{score.sections.map(s => <tr key={s.key}><td>{s.title}{s.enabled === false && <small>Section not included in this form.</small>}{s.enabled !== false && s.empty_as_zero && <small>No contributions submitted; section score is zero.</small>}</td><td>{s.rated_count}</td><td>{s.average.display}</td><td>{s.weight_percent}%</td><td>{s.weighted.display}</td></tr>)}</tbody></table></div><p className="overall-score">Overall score <strong>{score.overall.display}</strong></p><p className="muted">Calculated with exact values before display rounding. Policy {score.policy_version}.</p></section>;
+}

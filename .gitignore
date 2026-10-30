@@ -1,0 +1,23 @@
+.env
+.local/
+**/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.egg-info/
+**/node_modules/
+**/dist/
+**/test-results/
+**/playwright-report/
+*.db
+*.db-*
+*.log
+
+# Local source material and generated review artifacts
+/*.xlsx
+/output/
+/tmp/
+/docs/evidence/
+/deployment/*.tar
+~$*
+

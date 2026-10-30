@@ -1,0 +1,23 @@
+:root {
+  /* Corporate values verified from .elementor-kit-1431 on the official website. */
+  --brand-primary: #702c91;
+  --brand-secondary: #fe2072;
+  --brand-accent: #965dd4;
+  --brand-dark: #250644;
+  --brand-cyan: #5bcbda;
+  --surface: #ffffff;
+  --background: #fefcfa;
+  --text: #363436;
+  --muted: #5a5a5a;
+  /* Application semantic tokens; these are not official brand declarations. */
+  --border: #e5dfe8;
+  --soft: #f5f0f8;
+  --error: #9b1c31;
+  --success: #216544;
+  --font-family: 'Segoe UI', Arial, sans-serif;
+  font-family: var(--font-family);
+  color: var(--text);
+  background: var(--background);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+}

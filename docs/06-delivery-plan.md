@@ -1,0 +1,81 @@
+# Decisions, assumptions, and phased implementation
+
+## Approved updates recorded 20 October 2026
+
+Project owner approval in the implementation chat: HR uses Super Admin; Employee and Manager are the other selectable roles. Workbook employee fields support additional goals. Cycles use explicit participants/deadlines, minimum completed goals and late-submission policy.
+
+For Phase 5, the project owner amended empty contributions to **zero with the original 10% weight retained**, approved exact arithmetic/half-up display precision, and approved meeting confirmation, separate manager finalization/release, and dated employee receipt acknowledgement. The implementation uses applicable populated item counts, required ratings/supporting comments and leadership-only N/A with a reason. These updates supersede the relevant D01-D04/D06-D09/D11/D14 proposals below. The applicable version and complete decisions are recorded in [Phase 5 policy mi-2026-10-20-v1](10-phase-5-status.md). Other unresolved later-phase/production decisions remain open.
+
+## Decisions requiring business approval
+
+These are concrete decisions identified by discovery, not implemented defaults. The supplied prompt explicitly forbids silently resolving rules affecting scores, permissions or finalized records. Record the decision, approver, date, and applicable configuration version here before dependent implementation.
+
+| ID | Unresolved rule / evidence | Proposed resolution | Blocks |
+|---|---|---|---|
+| D01 | Goals/contributions use manual divisors F25=5, F34=3; blanks reduce average if counts remain unchanged | Derive count from applicable populated items; require every such item rated; unused slots excluded | Scoring/finalization |
+| D02 | No minimum goal/contribution count or whole-section N/A rule | At least one item in each weighted section; no weight redistribution; reject empty section | Form validation/finalization |
+| D03 | Leadership at A49 is “if applicable”; no eligibility/authority rule | Explicit manager-declared applicability with reason, persisted before finalization; other ten required unless approved otherwise | Competency validation/scoring |
+| D04 | No ROUND; one-decimal averages/overall, two-decimal weighted display | No intermediate rounding; authoritative Decimal/rational computation; one/two-decimal display; confirm tie rule and stored precision | Score storage/display |
+| D05 | No fractional overall-score category thresholds | Show numeric overall score without assigning integer scale labels until bands approved | Distribution bands/reports |
+| D06 | Section III manager-only; instruction 3 contradictory | Keep all eleven competency assessments manager-only; no employee competency comments without new approved fields | Form schema |
+| D07 | Section IV heading manager-only but questions address employee; support embedded in one cell | Employee owns achievements/development/support; manager owns strengths/improvements; confirm splitting compound prompt | Form ownership |
+| D08 | Instructions mention discussion comments, future responsibilities/objectives, signatures without all dedicated fields | Add employee discussion comment and manager forthcoming-year objectives only after approval; define whether acknowledgement replaces employee signature | Form extensions/acknowledgement |
+| D09 | Finalization, release and signatures timing unclear | Manager submits to HR; HR approves; manager discusses the approved evaluation with the employee before release; employee acknowledgement records receipt | Finalization/release |
+| D10 | Manager change/deactivation can strand in-flight appraisals; no authorized transfer workflow | Snapshot manager; no silent reassignment; define explicitly authorized, audited transfer authority before implementing an exceptional path | Reassignment/operations |
+| D11 | One account but multiple permitted functions only explicitly authorized; unclear multi-role combinations | EMPLOYEE baseline implicit; permit MANAGER functions only by explicit role and assignment; enumerate allowed role combinations | Role assignment/authorization |
+| D12 | HR authorized read scope not specified, especially drafts/unreleased reviews/own record and concern access | Confirm HR global narrative versus status-only access, unfinished evaluations and audit subsets; prohibit own unreleased result visibility across all paths | HR read/report scope |
+| D13 | Super Admins need assigned manager, potentially another role holder | Prohibit self-review and reporting cycles; require eligible independent manager for all roles | User assignment/eligibility |
+| D14 | Cycle population, not started, joiners/leavers, overlaps, closure not defined | Explicit cycle participants; snapshot identity/manager/config at activation; DRAFT+no started_at is not started; closure blocks new submissions but never finalizes records | Cycle activation/monitoring |
+| D15 | Deadline timezone, grace, resubmission deadline, overdue duration, closed-cycle reviews unspecified | Per-cycle timezone and UTC instants; overdue iff now > applicable deadline; elapsed duration; explicit resubmission deadline and no implicit grace | Overdue/reminders |
+| D16 | HR may configure ratings/workflow while historical results protected | Publish immutable config versions for future activation; no in-place recalculation; reject incompatible mid-cycle changes | Config publishing |
+| D17 | Reset channel, temporary password policy, expiry and bootstrap method unspecified | One-time setup/reset through approved channel; secure CLI bootstrap; approve expiry/password rules; temporary password alternative forces change | Auth rollout |
+| D18 | Reminder intervals, escalation hierarchy, recipients, retry policy unspecified | Versioned policies, deduplication intervals and capped retries; in-app transport; approved recipient rules | Notification scheduler |
+| D19 | Concern transition authority, visibility, priority and resolution rules undefined | HR controls transitions with resolution notes; responsible users get scoped read access only if authorized | Concerns |
+| D20 | Eligibility denominators, small-group privacy and cross-cycle comparability unspecified | Eligible participants denominator; submitted-or-later counts submission; finalized-or-released counts completed reviews; compare compatible versions only; agree privacy threshold | Aggregate reporting |
+| D21 | Source entity India (GBS), global website branding; font/logo distribution not supplied | Version employing entity/country; use global product brand with approved assets; fallback font pending permitted use | Production branding |
+| D22 | No data retention, hosting regions, export retention/permissions, expected scale | Confirm operational requirements and retention; no destructive purge feature in initial scope | Deployment readiness |
+| D23 | Expected outcomes and overall manager comments described in prompt but no dedicated workbook fields | Retain source responsibility/achievement and two manager narrative questions; approve any additional fields | Form scope |
+
+## Confirmed rules and proposed engineering choices
+
+Confirmed: employees never rate themselves; all roles own personal appraisals; HR and Super Admin cannot edit others' responses/evaluations; assigned managers cannot edit employee responses; finalized content/score cannot be reopened or altered through ordinary operations. These are not open permission questions.
+
+Proposed engineering choices that can proceed independently: modular monolith, same-origin SPA/API, opaque cookie sessions with CSRF, relational mutable responses, immutable submitted/final snapshots, durable in-app notification outbox, backend-calculated scores, strict DTOs, MySQL integration tests, and shared source-based React sections. These are designs to validate in implementation, not claimed working features.
+
+Editorial assumptions: normalize obvious spelling errors in user-facing labels after approval while retaining source text in evidence/config provenance; derive year labels from cycle; separate department and country and employee ID/designation in profiles. Do not invent example users, production credentials, score data, deadlines, competency rubrics or business sample goals.
+
+## Implementation phases and acceptance tests
+
+| Phase | Deliverables | Acceptance tests / exit criteria |
+|---|---|---|
+| 1 — Discovery and architecture | Repository/workbook/branding inspection, requirements, complete field/formula inventory, permissions, schema, APIs, folder structure, decision register and delivery plan | Evidence checks pass; original workbook hash unchanged; ten formulas traced; weights verified; unresolved scoring/workflow/access questions explicit. No application runtime tests applicable. |
+| 2 — Foundation and authentication | React/TS + FastAPI + MySQL scaffold, settings, exact locks, Alembic initial migration, security/authorization dependencies, shell/tokens, CI and Compose foundation | Fresh setup starts from documented commands; MySQL upgrade succeeds; typed API smoke checks; password hashes Argon2id; login/reset rate limits hold across instances; deactivated login rejected; CSRF checks; one-use expired/reset token tests; session revocation and mandatory password change; TypeScript/lint/build pass. |
+| 3 — Super Admin | User directory/create/edit, role and manager assignments, activate/deactivate, secure setup/reset, account dashboard and administrative audits | Duplicate ID/email rejected under concurrent creation; HR/employee/manager APIs denied; self-elevation rejected; concurrent last-admin protections; no hash/token disclosure; hierarchy cycles/self-manager denied; reset revokes sessions; directory filtering/paging; audits append-only; no admin appraisal editing. |
+| 4 — Employee forms and submission | Approved form/config versions, cycles/participants, personal dashboard, reusable source form sections, save/review/submit/resubmit/history | All four roles save/submit own narratives; no numerical self-score accepted even by direct API; unrelated record denied; six goals/four contributions rejected; required rules match decisions; submitted read-only; returned editable; content revision preserved; stale save 409; response projection hides unreleased review. |
+| 5 — Manager review and scoring | Assigned dashboard, draft evaluations, return with reason, resubmission, authoritative scoring, finalization/release and acknowledgement | Correct manager only; self-review denied; empty reason rejected; all 1–5 boundaries accepted, 0/6/fractions/booleans rejected; missing versus N/A tests; full and partial applicable sets; empty section finalization rejected per policy; exact weights; approved rounding ties; submitted revision mismatch denied; concurrent finalize vs return/save; finalize once; no post-finalization content edits for any role; release alone reveals results; acknowledgement leaves score unchanged. |
+| 6 — HR monitoring and alerts | Organization statuses, filters/paging, pending actor/action, deadlines, concerns/escalations, in-app scheduling/retry/delivery history | No overlap between not-started and draft counts; each workflow stage maps to responsible actor; exact deadline boundary/timezone/resubmission/closure cases; concern transitions and history; deduplication across manual and scheduled triggers; retry idempotency and failures visible; HR cannot return/finalize/edit by any API; own-unreleased restriction tested. |
+| 7 — Reports and exports | Individual/team/department/organization/operational queries; compatible comparisons; CSV/XLSX/PDF; export audit | Aggregates reconcile with known source fixtures and final snapshots; denominators and incomplete rows correct; current filters applied identically in all formats; manager cannot expand scope; own unreleased ratings absent across all formats; CSV injection neutralized; generation date/cycle/filters included; XLSX typed values and PDF pagination visually inspected; no appraisal changes during export. |
+| 8 — Validation and deployment | Production containers, migrations/backup/restore, accessibility/security/performance, runbooks and approved brand assets | Backend unit/integration/authorization suites; four-role E2E main/edge paths; frontend components/typecheck/lint/build; keyboard/focus/contrast at desktop/tablet/mobile; real MySQL schema checks; no default credentials; session/cookie/proxy config; logs scrubbed; load target agreed then tested; backup restore rehearsed; exact reproducible setup/migration/test commands documented. |
+
+## Scoring and reporting fixture plan
+
+Once policy approved, keep tests independent of the implementation's formula functions. Examples: all ratings 1 yields 1; all 5 yields 5; goal average 4, contribution average 3, competency average 5 yields 4.1. Two applicable goals of 4 yield 4 under the proposed count policy, explicitly contrasted with source manual divisor 5 yielding 1.6. Missing required goal/competency rating rejects finalization; unused slot is absent, not zero; conditional leadership N/A excludes only that competency. Empty/all-N/A section has no numeric average and blocks finalization under the proposal. Include exact rounding ties, recurring fractional averages, maximum item counts, zero/negative counts in import attempts, and unchanged historical results after config publication.
+
+Use seeded test-only role/relationship fixtures, never hardcoded production users. Test direct API attacks on every write endpoint, not only UI visibility. Table-driven authorization should enumerate each role, ownership/assignment condition and workflow state, including ID substitution, mass assignment, exports, histories, and multiple-role conflicts.
+
+Report fixtures must cover no eligible participants, no finalizations, every workflow state, changed department/manager, two cycles with incompatible scoring versions, returned/resubmitted revisions, overdue boundary, open/closed concerns, and failed delivery retries. Define zero-denominator completion rates as unavailable rather than divide-by-zero or invented 0% unless business approves another presentation.
+
+## Validation performed in Phase 1
+
+Read the complete supplied master request and initial workspace inventory. Parsed both sheets, all populated and styled cells, ten formulas and exact cached values; inspected styles/merged regions/data validations/drawing/print metadata. Verified 70/10/20 weights and displayed precision, identified manual divisors and invalid template contribution zero ratings. Retrieved homepage/CSS and verified rendered branding. Queried official package registries for candidate versions and declared runtime requirements. Documentation verification results are recorded in `evidence/discovery-verification.json`.
+
+No backend, frontend, migration, security, browser application, or end-to-end tests have run because Phase 1 creates no application. No compatibility, security, WCAG, production readiness, or deployment success is claimed. Phase-specific test results must be reported after each implementation increment.
+
+## Next increment
+
+Resolve D01–D09 for form/scoring/finalization and D11–D17 for access and cycle/auth behavior before enabling those features. Phase 2 can independently create the build/database/security foundation and read-only shell using the proposed architecture. Record approved policies here and bind them to a configuration version; do not silently convert the proposals into production rules.
+
+
+## Confirmed HR extension - 21 October 2026
+
+The owner confirmed that Super Admin is additional access, so HR may also be a Manager. The manager submits a complete evaluation to HR for calibration and approval. After HR approval, the evaluation returns to the manager, who discusses the approved scores with the employee and confirms the meeting before release. Form customization supports sections, text questions, competencies and section weights; manager-only 1-5 ratings and immutable published versions apply to future cycles. Excel import uses template, validation preview, explicit confirmation, manager lookup by employee ID, duplicate rejection and private one-time setup links. These decisions supersede earlier exclusive-role assumptions. See [implemented HR operations](11-hr-operations.md).

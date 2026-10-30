@@ -1,0 +1,32 @@
+"""Explicit metadata registry for migrations."""
+
+from app.modules.appraisals.models import Appraisal as Appraisal
+from app.modules.appraisals.models import AppraisalAttachment as AppraisalAttachment
+from app.modules.appraisals.models import AppraisalHistory as AppraisalHistory
+from app.modules.appraisals.models import AppraisalItem as AppraisalItem
+from app.modules.appraisals.models import AppraisalRevision as AppraisalRevision
+from app.modules.appraisals.models import Cycle as Cycle
+from app.modules.appraisals.models import DevelopmentPlan as DevelopmentPlan
+from app.modules.appraisals.models import FormVersion as FormVersion
+from app.modules.appraisals.models import Participant as Participant
+from app.modules.audit.models import AuditEvent as AuditEvent
+from app.modules.auth.models import AuthSession as AuthSession
+from app.modules.auth.models import Credential as Credential
+from app.modules.auth.models import PasswordToken as PasswordToken
+from app.modules.auth.models import RateLimit as RateLimit
+from app.modules.forms.models import FormTemplate as FormTemplate
+from app.modules.imports.models import ImportBatch as ImportBatch
+from app.modules.reviews.models import Acknowledgement as Acknowledgement
+from app.modules.reviews.models import CalibrationDraft as CalibrationDraft
+from app.modules.reviews.models import CalibrationEvent as CalibrationEvent
+from app.modules.reviews.models import FinalEvaluation as FinalEvaluation
+from app.modules.reviews.models import ManagerSubmission as ManagerSubmission
+from app.modules.reviews.models import Release as Release
+from app.modules.reviews.models import ReviewDraft as ReviewDraft
+from app.modules.reviews.models import ReviewEvent as ReviewEvent
+from app.modules.users.models import Department as Department
+from app.modules.users.models import OperatorGuard as OperatorGuard
+from app.modules.users.models import ReportingRelationship as ReportingRelationship
+from app.modules.users.models import Role as Role
+from app.modules.users.models import User as User
+from app.modules.users.models import UserRole as UserRole

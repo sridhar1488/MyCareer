@@ -1,0 +1,64 @@
+# Local development stack. Production requires TLS termination and secure-cookie settings.
+name: mi-leapmetrics
+services:
+  db:
+    image: mysql:8.4.11@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364
+    environment:
+      MYSQL_DATABASE: leapmetrics
+      MYSQL_USER: leapmetrics
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD in .env}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD in .env}
+      MYSQL_ROOT_HOST: "%"
+    volumes:
+      - database:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "MYSQL_PWD=\"$$MYSQL_ROOT_PASSWORD\" mysqladmin ping -h localhost -u root --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # No host database port. Only the Compose network can reach MySQL.
+  migrate:
+    build:
+      context: ..
+      dockerfile: deployment/backend.Dockerfile
+    environment:
+      MI_ENVIRONMENT: development
+      MI_DATABASE_URL: mysql+pymysql://root:${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}@db:3306/leapmetrics?charset=utf8mb4
+      MI_SECRET_KEY: ${MI_SECRET_KEY:?Generate MI_SECRET_KEY}
+    command: ["alembic", "upgrade", "head"]
+    depends_on:
+      db:
+        condition: service_healthy
+    profiles: ["tools"]
+  api:
+    build:
+      context: ..
+      dockerfile: deployment/backend.Dockerfile
+    environment:
+      MI_ENVIRONMENT: development
+      MI_DATABASE_URL: mysql+pymysql://leapmetrics:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/leapmetrics?charset=utf8mb4
+      MI_SECRET_KEY: ${MI_SECRET_KEY:?Generate MI_SECRET_KEY}
+      MI_ALLOWED_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080"]'
+      MI_COOKIE_SECURE: "false"
+      MI_ATTACHMENT_DIRECTORY: /srv/storage/appraisal-attachments
+    volumes:
+      - attachments:/srv/storage/appraisal-attachments
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/v1/health/ready')"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+  web:
+    build:
+      context: ..
+      dockerfile: deployment/frontend.Dockerfile
+    ports: ["127.0.0.1:8080:80"]
+    depends_on:
+      api:
+        condition: service_healthy
+volumes:
+  database:
+  attachments:

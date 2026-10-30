@@ -1,0 +1,50 @@
+{
+  "source_workbook": "MI Performance Appraisal Development Form YE2025.xlsx",
+  "source_sha256": "0c0d1eef93045852afacf0edcc5078f14586ee1349884b1016785ef24bedd794",
+  "instructions": "1.Using Section I below (Reviewee / Employee Section), the employee completes his/her self-assessment against his /her job responsibilities/tasks/goals/objectives referring to the  job description 1(a).Using the below rating scale, the manager completes the section (Reviewer/Manager's Section I) based on the performance of the employee's responsibilities, goals/objectives. Only whole numbers (1-5) are allowed. The manager should provide specific details relative to the performance of the goal/objective. The manager enters the Number of Goals in the appropriate section. Section I is weighted 70% of the total rating. Space for up to 5 goals is provided; if all spaces are not needed please leave them blank.\n2. Using Section II employee completes his / her additional contributions to the organisation. Using the below rating scale, the Reviewer / Manager completes section II based on the Reviewee's / Employee's input. Only whole numbers are allowed. The manager should provide specific details relative to the performance of the competency. Section II is weighted 10% of the total rating.\n3. Using Section III employee completes his / her additional contributions to the organisation. Using the below rating scale, the Reviewer / Manager completes section II based on the Reviewee's / Employee's input. Only whole numbers are allowed. The manager should provide specific details relative to the performance of the competency. Section II is weighted 20% of the total rating.\n4. The Reviewer / Manager provides their overall comments in the Manager's Comments using Section IV. \n5. The Reviewer/Manager and the employee meet in person and review the performance appraisal. The employee may add comments in the Employee's Comments section.\n6. The Reviewer/Manager completes the future job responsibilities, tasks, and objectives for the forthcoming year \n7. Both parties sign the appraisal and forward the original copy to Human Resources office",
+  "goal_description_label": "List different areas of your responsibilities/performance parameters ( as per your job description or role requirements)",
+  "goal_narrative_label": "Self Evaluation of Task / Goal /Objective Achievement \nProvide a summary of your achievements / contributions against these areas of resposbility/targets.  Hightlight your most significant contributions to our business in this annual review period / what did you accomplish during this period",
+  "contribution_instruction": "To be completed by Reviewee/Employee (Employee to write the area of contribution and explain their contributions)",
+  "competencies": [
+    "Job Knowledge/Technical Proficiency:",
+    "Commitment to Teamwork & Collaboration:",
+    "Communiction & Interpersonal Skills:",
+    "Productivity & Quality :",
+    "Customer Focus & Engagement",
+    "Adaptability, Dependability & Integrity :",
+    "Initiative & Innovation",
+    "Problem Solving Skills",
+    "Administration & Compliance",
+    "Learning & Development",
+    "Leadership & Team Management Skills (if applicable)"
+  ],
+  "business_achievements_label": "1. What do you consider to be your most important achievements/contributions to the success of the company / project during the year?",
+  "development_achievements_label": "2. What do you think are you important achievements for your personal/professional development during the year ?",
+  "development_instruction": "PROFESSIONAL DEVELOPMENT GOALS FOR 2026 (BASED ON YOUR DISCUSSION WITH THE LINE MANAGER OR CLIENT MANAGER\n\n1. What growth and/or development would you like to achieve in the next six months?\n\n\n2. List the technical and personal development needs/plans that you need to achieve in 2026 and the support required to meet your development needs.\n\n\n\n\n\n",
+  "rating_scale": [
+    "Rating Scale",
+    "5 = Exceptional",
+    "Performance: significantly and consistently exceeds goals",
+    "Competency: consistently demonstrates exceptional behaviors; serves as a role model and mentor",
+    "4 = Highly Effective",
+    "Performance: consistently achieves and often exceeds goals",
+    "Competency: consistently demonstrates effective behaviors and often demonstrates exceptional behaviors",
+    "3 = Effective",
+    "Performance: consistently achieves goals",
+    "Competency: consistently demonstrates effective behaviors",
+    "2 = Inconsistent",
+    "Performance: achieves some, but not all goals; needs improvement",
+    "Competency: demonstrates some behaviors but not others, or uses behaviors inconsistently; may be appropriate for",
+    "employees in new or more challenging positions, or for those who need development",
+    "1 = Unsatisfactory",
+    "Performance: rarely achieves established goals; requires significant and immediate improvement",
+    "Competency: rarely demonstrates competency behaviors; requires significant development"
+  ],
+  "goals_limit": 5,
+  "contributions_limit": 3,
+  "section_weights": {
+    "goals": 70,
+    "contributions": 10,
+    "competencies": 20
+  }
+}
