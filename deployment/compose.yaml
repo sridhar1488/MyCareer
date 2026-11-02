@@ -38,9 +38,21 @@ services:
       MI_ENVIRONMENT: development
       MI_DATABASE_URL: mysql+pymysql://leapmetrics:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/leapmetrics?charset=utf8mb4
       MI_SECRET_KEY: ${MI_SECRET_KEY:?Generate MI_SECRET_KEY}
-      MI_ALLOWED_ORIGINS: '["http://localhost:8080","http://127.0.0.1:8080"]'
+      MI_ALLOWED_ORIGINS: '${MI_DOCKER_ALLOWED_ORIGINS:-["http://localhost:8080","http://127.0.0.1:8080"]}'
       MI_COOKIE_SECURE: "false"
       MI_ATTACHMENT_DIRECTORY: /srv/storage/appraisal-attachments
+      MI_MAIL_ENABLED: ${MI_MAIL_ENABLED:-false}
+      MI_MAIL_TEST_MODE: ${MI_MAIL_TEST_MODE:-true}
+      MI_MAIL_TEST_RECIPIENT: ${MI_MAIL_TEST_RECIPIENT:-}
+      MI_MAIL_FROM_ADDRESS: ${MI_MAIL_FROM_ADDRESS:-}
+      MI_MAIL_FROM_NAME: ${MI_MAIL_FROM_NAME:-MyCareer}
+      MI_SMTP_HOST: ${MI_SMTP_HOST:-}
+      MI_SMTP_PORT: ${MI_SMTP_PORT:-587}
+      MI_SMTP_USERNAME: ${MI_SMTP_USERNAME:-}
+      MI_SMTP_PASSWORD: ${MI_SMTP_PASSWORD:-}
+      MI_SMTP_STARTTLS: ${MI_SMTP_STARTTLS:-true}
+      MI_PUBLIC_BASE_URL: ${MI_PUBLIC_BASE_URL:-}
+      MI_SETUP_LINK_MINUTES: ${MI_SETUP_LINK_MINUTES:-1440}
     volumes:
       - attachments:/srv/storage/appraisal-attachments
     depends_on:
@@ -55,7 +67,7 @@ services:
     build:
       context: ..
       dockerfile: deployment/frontend.Dockerfile
-    ports: ["127.0.0.1:8080:80"]
+    ports: ["8080:80"]
     depends_on:
       api:
         condition: service_healthy

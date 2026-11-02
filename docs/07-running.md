@@ -119,13 +119,13 @@ E2E seeding refuses non-test environments and databases without the `_e2e_test` 
 
 The on-prem package builds the React UI and FastAPI API into one `mycareer-app` image. MySQL remains a separate container with its own durable volume so database storage and backups are independent of application image upgrades. The app container serves the UI and `/api` from the same origin.
 
-The Linux `amd64` image has been built and smoke-checked. The transferable archive is `deployment/mycareer-app_1.0_linux_amd64.tar` (about 80 MB). The app image is for Linux x86-64 servers; verify the target with `uname -m` (`x86_64` is expected). `deployment/compose.onprem.yaml` defines MySQL, migrations and the app. It binds the app only to `127.0.0.1:8080`; configure a host TLS reverse proxy to preserve the original `Host` header and forward to that address. Expose only HTTPS to users and set `MI_ALLOWED_ORIGINS` to the exact public HTTPS origin. Install Docker Engine and the Compose v2 plugin using the official instructions for the target Linux distribution; for Ubuntu, see [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Avoid opening the Docker-published app or database ports directly to the network.
+The Linux `amd64` image is built as version 1.1. The transferable archive is `deployment/mycareer-app_1.1_linux_amd64.tar` (about 80 MB). The app image is for Linux x86-64 servers; verify the target with `uname -m` (`x86_64` is expected). `deployment/compose.onprem.yaml` defines MySQL, migrations and the app. The app port is published on all host interfaces at `8080` so a network TLS proxy can reach it. Set `MI_ALLOWED_ORIGINS` and `MI_PUBLIC_BASE_URL` to the exact HTTPS app origin/hostname; never use a wildcard or a localhost value in an on-prem deployment. Install Docker Engine and the Compose v2 plugin using the official instructions for the target Linux distribution; for Ubuntu, see [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Restrict cleartext port 8080 to trusted proxy/network sources with host or network firewall rules, and expose HTTPS to users.
 
 ### First installation on an Ubuntu/Debian-style Linux server
 
 1. Install and start Docker Engine with the Compose v2 plugin, following the official instructions for the exact Linux distribution. Confirm `sudo docker version` and `sudo docker compose version` work. Keep administrative access restricted; membership in the `docker` group grants root-equivalent control of the host.
 2. Copy these files from this workspace to the server, for example with SCP or an approved file transfer tool:
-   - `deployment/mycareer-app_1.0_linux_amd64.tar`
+   - `deployment/mycareer-app_1.1_linux_amd64.tar`
    - `deployment/compose.onprem.yaml`
    - `deployment/onprem.env.example`
 3. Create a private deployment directory and load the app image:
@@ -159,7 +159,7 @@ sudo docker compose --env-file .env -f compose.onprem.yaml up -d app
 sudo docker compose --env-file .env -f compose.onprem.yaml ps
 ```
 
-6. Configure the host's TLS reverse proxy and certificate. It must forward the original `Host` header to `127.0.0.1:8080`. Keep port 8080 loopback-only and do not publish MySQL. Allow inbound HTTPS at the host/network firewall. Production uses secure cookies and rejects non-HTTPS origins.
+6. Configure the TLS reverse proxy and certificate. It must forward the original `Host` header to the server's app listener on port 8080. The app port is bound on all interfaces; restrict its cleartext access to the trusted reverse proxy using host/network firewall rules. Do not publish MySQL. Allow inbound HTTPS at the host/network firewall. Production uses secure cookies and rejects non-HTTPS origins.
 7. Verify readiness through the HTTPS proxy, then create the first application administrator:
 
 ```sh
@@ -173,6 +173,29 @@ sudo docker compose --env-file .env -f compose.onprem.yaml exec -it app \
 
 MySQL and appraisal attachments persist in Compose volumes named `mycareer_database` and `mycareer_attachments`. Set up tested backups of both before production use and before every upgrade. Never run `docker compose down -v` on a live installation. For an upgrade, load the replacement image, back up both volumes, run the migration command, recreate the app container, and verify readiness.
 
+### Lifecycle email alerts
+
+The API queues lifecycle notifications in the same database transaction as the appraisal action, then sends them through the configured company SMTP relay. Failed deliveries are retried; SMTP credentials are read from environment variables and never stored in the outbox. Messages cover cycle launch (participant, with manager copied), employee submission (assigned manager, including return-for-revision guidance), manager return for revision (employee, including the manager's reason and deadline), manager submission for HR approval (active Super Admins), manager release (employee), and bulk-import onboarding (employee, with a one-time setup link). Account passwords are never emailed. Setup links expire after 24 hours by default and work once; the lifetime is configurable with `MI_SETUP_LINK_MINUTES`.
+
+Mail is disabled by default. Configure these values in the deployment `.env` and recreate the app container:
+
+```dotenv
+MI_MAIL_ENABLED=true
+MI_MAIL_TEST_MODE=true
+MI_MAIL_TEST_RECIPIENT=controlled-test-mailbox@company.example
+MI_MAIL_FROM_ADDRESS=mycareer@company.example
+MI_MAIL_FROM_NAME=MyCareer
+MI_SMTP_HOST=smtp-relay.company.example
+MI_SMTP_PORT=587
+MI_SMTP_USERNAME=
+MI_SMTP_PASSWORD=
+MI_SMTP_STARTTLS=true
+MI_PUBLIC_BASE_URL=https://mycareer.company.example
+MI_SETUP_LINK_MINUTES=1440
+```
+
+In test mode, every message is redirected to the test mailbox; real `To` and `Cc` recipients are included in the body for verification and are never sent the message. Onboarding test emails omit working setup links. Verify the event types and links. Only then set `MI_MAIL_TEST_MODE=false` to enable live delivery. Use an authorized sender and relay credentials supplied through the server's secret management process. Do not put secrets in chat, Git, or logs. Delivery uses an at-least-once queue, so a relay disconnect immediately after accepting a message can result in a duplicate retry.
+
 For the local development stack, use fresh URL-safe MySQL passwords and an application secret:
 
 ```powershell
@@ -182,11 +205,11 @@ docker compose --env-file .env -f deployment/compose.yaml up --build -d api web
 docker compose --env-file .env -f deployment/compose.yaml exec api python -m app.cli bootstrap-admin --email YOUR_WORK_EMAIL --employee-id YOUR_EMPLOYEE_ID --name "YOUR_FULL_NAME"
 ```
 
-Open [the development container app](http://localhost:8080). MySQL has no host port mapping. Do not use `down -v` unless intentionally destroying data.
+The development container publishes port 8080 on all host interfaces. Open [the development container app](http://localhost:8080) on this machine, or set `MI_DOCKER_ALLOWED_ORIGINS` in `.env` to the exact origin used from another machine. MySQL has no host port mapping. Do not use `down -v` unless intentionally destroying data.
 
 Colors follow verified corporate tokens. Dark surfaces use the official white logo; `VITE_CORPORATE_LOGO_URL` accepts an approved alternative at build time. Light surfaces use a text company name. The web interface uses system fonts. PDF exports embed the redistributable DejaVu Sans font with its license. Production CSP permits corporate-hosted images and no arbitrary remote scripts.
 
 
 ## HR operations upgrade (21 October 2026)
 
-Install the updated backend runtime lock, run `python -m alembic upgrade head` from `backend`, regenerate API types and rebuild the frontend, then restart both processes. Expected migration head is `mycareer`. The migration preserves previously finalized evaluations as approved. Appraisal attachments are stored in a private persistent directory; back up that directory along with the database. See [HR operations](11-hr-operations.md) for combined roles, monitoring, immutable form publication, final report downloads, and Excel imports with private setup links. No existing user needs to be recreated.
+Install the updated backend runtime lock, run `python -m alembic upgrade head` from `backend`, regenerate API types and rebuild the frontend, then restart both processes. Expected migration head is `rolepolicy`. The migration preserves previously finalized evaluations as approved. Appraisal attachments are stored in a private persistent directory; back up that directory along with the database. See [HR operations](11-hr-operations.md) for combined roles, monitoring, immutable form publication, final report downloads, and Excel imports with private setup links. No existing user needs to be recreated.

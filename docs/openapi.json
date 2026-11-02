@@ -6331,6 +6331,141 @@
         ]
       }
     },
+    "/api/v1/hr/analytics": {
+      "get": {
+        "tags": [
+          "HR monitoring"
+        ],
+        "summary": "Analytics",
+        "description": "Aggregate cycle progress and HR-approved scores for HR-only charts.",
+        "operationId": "analytics_api_v1_hr_analytics_get",
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cycle_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cycle Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AnalyticsResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "403": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Forbidden"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Too Many Requests"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Internal Server Error"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        }
+      }
+    },
     "/api/v1/hr/monitor": {
       "get": {
         "tags": [
@@ -8787,6 +8922,122 @@
           }
         }
       }
+    },
+    "/api/v1/help/content": {
+      "get": {
+        "tags": [
+          "Help and support"
+        ],
+        "summary": "Content",
+        "operationId": "content_api_v1_help_content_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HelpContent"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Bad Request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Forbidden",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not Found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Conflict",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Unprocessable Entity",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Too Many Requests",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Internal Server Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Service Unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "APIKeyCookie": []
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -8831,6 +9082,77 @@
           "expected_version"
         ],
         "title": "AcknowledgeInput"
+      },
+      "AnalyticsResponse": {
+        "properties": {
+          "summary": {
+            "$ref": "#/components/schemas/AnalyticsSummary"
+          },
+          "departments": {
+            "items": {
+              "$ref": "#/components/schemas/DepartmentAnalytics"
+            },
+            "type": "array",
+            "title": "Departments"
+          },
+          "top_performers": {
+            "items": {
+              "$ref": "#/components/schemas/TopPerformer"
+            },
+            "type": "array",
+            "title": "Top Performers"
+          },
+          "score_points": {
+            "items": {
+              "$ref": "#/components/schemas/ScorePoint"
+            },
+            "type": "array",
+            "title": "Score Points"
+          }
+        },
+        "type": "object",
+        "required": [
+          "summary",
+          "departments",
+          "top_performers",
+          "score_points"
+        ],
+        "title": "AnalyticsResponse"
+      },
+      "AnalyticsSummary": {
+        "properties": {
+          "appraisal_count": {
+            "type": "integer",
+            "title": "Appraisal Count"
+          },
+          "approved_count": {
+            "type": "integer",
+            "title": "Approved Count"
+          },
+          "approval_percent": {
+            "type": "string",
+            "title": "Approval Percent"
+          },
+          "approved_average": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Approved Average"
+          }
+        },
+        "type": "object",
+        "required": [
+          "appraisal_count",
+          "approved_count",
+          "approval_percent",
+          "approved_average"
+        ],
+        "title": "AnalyticsSummary"
       },
       "AppraisalPage": {
         "properties": {
@@ -9602,6 +9924,46 @@
         ],
         "title": "CycleResponse"
       },
+      "DepartmentAnalytics": {
+        "properties": {
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "appraisal_count": {
+            "type": "integer",
+            "title": "Appraisal Count"
+          },
+          "approved_count": {
+            "type": "integer",
+            "title": "Approved Count"
+          },
+          "approval_percent": {
+            "type": "string",
+            "title": "Approval Percent"
+          },
+          "average_score": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Average Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "department",
+          "appraisal_count",
+          "approved_count",
+          "approval_percent",
+          "average_score"
+        ],
+        "title": "DepartmentAnalytics"
+      },
       "DevelopmentInput": {
         "properties": {
           "business_achievements": {
@@ -10000,6 +10362,24 @@
         ],
         "title": "ExactValue"
       },
+      "FAQ": {
+        "properties": {
+          "question": {
+            "type": "string",
+            "title": "Question"
+          },
+          "answer": {
+            "type": "string",
+            "title": "Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "question",
+          "answer"
+        ],
+        "title": "FAQ"
+      },
       "FieldError": {
         "properties": {
           "field": {
@@ -10151,6 +10531,91 @@
           "competencies"
         ],
         "title": "FormConfig"
+      },
+      "Guide": {
+        "properties": {
+          "audience": {
+            "type": "string",
+            "title": "Audience"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "summary": {
+            "type": "string",
+            "title": "Summary"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/HelpStep"
+            },
+            "type": "array",
+            "title": "Steps"
+          },
+          "faqs": {
+            "items": {
+              "$ref": "#/components/schemas/FAQ"
+            },
+            "type": "array",
+            "title": "Faqs"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audience",
+          "title",
+          "summary",
+          "steps",
+          "faqs"
+        ],
+        "title": "Guide"
+      },
+      "HelpContent": {
+        "properties": {
+          "guides": {
+            "items": {
+              "$ref": "#/components/schemas/Guide"
+            },
+            "type": "array",
+            "title": "Guides"
+          }
+        },
+        "type": "object",
+        "required": [
+          "guides"
+        ],
+        "title": "HelpContent"
+      },
+      "HelpStep": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "description": {
+            "type": "string",
+            "title": "Description"
+          },
+          "bullets": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Bullets"
+          },
+          "screenshot": {
+            "$ref": "#/components/schemas/ScreenPreview"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "description",
+          "bullets",
+          "screenshot"
+        ],
+        "title": "HelpStep"
       },
       "HistoryPage": {
         "properties": {
@@ -11234,6 +11699,29 @@
         ],
         "title": "SaveReview"
       },
+      "ScorePoint": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "title": "Employee Id"
+          },
+          "employee_name": {
+            "type": "string",
+            "title": "Employee Name"
+          },
+          "score": {
+            "type": "string",
+            "title": "Score"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_name",
+          "score"
+        ],
+        "title": "ScorePoint"
+      },
       "ScoreResult": {
         "properties": {
           "policy_version": {
@@ -11258,6 +11746,50 @@
           "overall"
         ],
         "title": "ScoreResult"
+      },
+      "ScreenPreview": {
+        "properties": {
+          "page_title": {
+            "type": "string",
+            "title": "Page Title"
+          },
+          "nav_items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Nav Items"
+          },
+          "eyebrow": {
+            "type": "string",
+            "title": "Eyebrow"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "details": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Details"
+          },
+          "action": {
+            "type": "string",
+            "title": "Action"
+          }
+        },
+        "type": "object",
+        "required": [
+          "page_title",
+          "nav_items",
+          "eyebrow",
+          "status",
+          "details",
+          "action"
+        ],
+        "title": "ScreenPreview"
       },
       "SectionScore": {
         "properties": {
@@ -11629,6 +12161,44 @@
           "questions"
         ],
         "title": "TextSection"
+      },
+      "TopPerformer": {
+        "properties": {
+          "employee_id": {
+            "type": "string",
+            "title": "Employee Id"
+          },
+          "employee_name": {
+            "type": "string",
+            "title": "Employee Name"
+          },
+          "department": {
+            "type": "string",
+            "title": "Department"
+          },
+          "manager_name": {
+            "type": "string",
+            "title": "Manager Name"
+          },
+          "average_score": {
+            "type": "string",
+            "title": "Average Score"
+          },
+          "approved_appraisals": {
+            "type": "integer",
+            "title": "Approved Appraisals"
+          }
+        },
+        "type": "object",
+        "required": [
+          "employee_id",
+          "employee_name",
+          "department",
+          "manager_name",
+          "average_score",
+          "approved_appraisals"
+        ],
+        "title": "TopPerformer"
       },
       "TransitionInput": {
         "properties": {

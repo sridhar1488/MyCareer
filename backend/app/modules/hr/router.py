@@ -1,11 +1,25 @@
+from fractions import Fraction
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
-from app.api.dependencies import get_db, require_role
+from app.api.dependencies import Identity, get_db, require_role
 from app.db.base import utcnow
 from app.modules.appraisals.models import Appraisal, Cycle
-from app.modules.hr.schemas import FilterOption, ManagerStatus, MonitorOptions, MonitorResponse, MonitorRow
+from app.modules.hr.schemas import (
+    AnalyticsResponse,
+    DepartmentAnalytics,
+    FilterOption,
+    ManagerStatus,
+    MonitorOptions,
+    MonitorResponse,
+    MonitorRow,
+    ScorePoint,
+    TopPerformer,
+    AnalyticsSummary,
+)
+from app.modules.reviews import scoring
 from app.modules.reviews.models import Acknowledgement, FinalEvaluation, Release
 from app.modules.users.models import RoleCode, User, UserRole
 
@@ -45,6 +59,122 @@ def options(db: Session = Depends(get_db)):
     )
 
 
+@router.get("/analytics", response_model=AnalyticsResponse)
+def analytics(
+    cycle_id: str | None = None,
+    actor: Identity = Depends(require_role(RoleCode.SUPER_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    """Aggregate cycle progress and HR-approved scores for HR-only charts."""
+    query = (
+        select(Appraisal, FinalEvaluation)
+        .outerjoin(FinalEvaluation, FinalEvaluation.appraisal_id == Appraisal.id)
+        .where(
+            or_(Appraisal.employee_id != actor.user.id, Appraisal.state == "RELEASED")
+        )
+    )
+    if cycle_id:
+        query = query.where(Appraisal.cycle_id == cycle_id)
+
+    department_rows: dict[str, dict] = {}
+    employee_scores: dict[str, dict] = {}
+    overall_scores: list[Fraction] = []
+    score_points: list[ScorePoint] = []
+    appraisal_count = 0
+    approved_count = 0
+    for appraisal, final in db.execute(query):
+        appraisal_count += 1
+        identity = (
+            final.employee_snapshot.get("identity", {})
+            if final
+            else appraisal.identity_snapshot
+        )
+        department = identity.get("department") or "Unassigned"
+        dept = department_rows.setdefault(
+            department, {"appraisals": 0, "approved": 0, "scores": []}
+        )
+        dept["appraisals"] += 1
+        if not final or appraisal.state not in {"HR_APPROVED", "RELEASED"}:
+            continue
+
+        approved_count += 1
+        raw_overall = final.score.get("overall", {})
+        score_value = Fraction(
+            int(raw_overall["numerator"]), int(raw_overall["denominator"])
+        )
+        overall_scores.append(score_value)
+        dept["approved"] += 1
+        dept["scores"].append(score_value)
+
+        employee_id = identity.get("employee_id", "")
+        employee_name = identity.get("employee_name", "Unknown employee")
+        manager_name = identity.get("manager_name", "")
+        score_points.append(
+            ScorePoint(
+                employee_id=employee_id,
+                employee_name=employee_name,
+                score=scoring.exact(score_value, 1).display,
+            )
+        )
+        person = employee_scores.setdefault(
+            employee_id,
+            {
+                "employee_name": employee_name,
+                "department": department,
+                "manager_name": manager_name,
+                "scores": [],
+            },
+        )
+        person["scores"].append(score_value)
+
+    def average(values):
+        return sum(values, Fraction(0)) / len(values) if values else None
+
+    departments = [
+        DepartmentAnalytics(
+            department=name,
+            appraisal_count=values["appraisals"],
+            approved_count=values["approved"],
+            approval_percent=scoring.exact(
+                Fraction(values["approved"] * 100, values["appraisals"]), 1
+            ).display,
+            average_score=(
+                scoring.exact(average(values["scores"]), 1).display
+                if values["scores"]
+                else None
+            ),
+        )
+        for name, values in sorted(department_rows.items())
+    ]
+    performers = [
+        TopPerformer(
+            employee_id=employee_id,
+            employee_name=person["employee_name"],
+            department=person["department"],
+            manager_name=person["manager_name"],
+            average_score=scoring.exact(average(person["scores"]), 1).display,
+            approved_appraisals=len(person["scores"]),
+        )
+        for employee_id, person in employee_scores.items()
+    ]
+    performers.sort(key=lambda p: (-Fraction(p.average_score), p.employee_name.casefold()))
+    return AnalyticsResponse(
+        summary=AnalyticsSummary(
+            appraisal_count=appraisal_count,
+            approved_count=approved_count,
+            approval_percent=(
+                scoring.exact(Fraction(approved_count * 100, appraisal_count), 1).display
+                if appraisal_count
+                else "0.0"
+            ),
+            approved_average=(
+                scoring.exact(average(overall_scores), 1).display if overall_scores else None
+            ),
+        ),
+        departments=departments,
+        top_performers=performers[:5],
+        score_points=score_points,
+    )
 @router.get("/monitor", response_model=MonitorResponse)
 def monitor(
     view: str = Query("individuals", pattern="^(individuals|managers)$"),

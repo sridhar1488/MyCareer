@@ -4,9 +4,13 @@ This increment implements the additional requirements confirmed in testing. It s
 
 ## Access and reporting relationships
 
-An account has an Employee or Manager work role. **HR / Super Admin** is additional access, so a Manager can also administer the system. In **User directory → Change role**, choose Manager and select **Additional HR / Super Admin access**. A Manager with that permission sees both **Team appraisals** and the HR screens. Administration does not grant permission to score unrelated appraisals or review oneself. Existing Super Admin accounts retain access; changing your own permissions remains prohibited. Another Super Admin must make your role changes.
+An account can have an Employee or Manager work role. **Super Admin is reserved for HR** and cannot be combined with the Employee role. HR users who also manage staff can have both **Manager** and **Super Admin**. HR users without direct reports can have the standalone **HR / Super Admin** role. The role editor, API, and bulk import all reject Employee + Super Admin assignments. Administration does not grant permission to score unrelated appraisals or review oneself. Another Super Admin must make your role changes.
 
-All account types retain their own employee appraisal. Removing a manager role is blocked while reporting/reviewer obligations remain. Role changes revoke sessions. Last-administrator safeguards remain in effect. Counts by role can overlap because access is additive.
+All account types can access their own appraisal. Removing a manager role is blocked while reporting/reviewer obligations remain. Role changes revoke sessions. Last-administrator safeguards remain in effect. Manager + Super Admin is supported for HR managers.
+
+## Help and support
+
+The **Help & Support** page provides role-specific workflow walkthroughs, FAQs, and illustrative sample-screen previews. Employee and Manager guides are only returned for signed-in accounts with those roles; Super Admin instructions are returned only to Super Admin accounts. The API enforces this filtering, so hiding a menu or section is not the only access control. Screen previews use fictional sample values.
 
 ## Monitoring and approved results
 
@@ -48,7 +52,7 @@ Per download, Excel supports up to 1,000 evaluations and PDF up to 100. Narrow t
 Open **User directory → Import users from Excel**:
 
 1. Download the template and fill the **Users** sheet without changing headers.
-2. Preserve employee IDs and manager IDs as text. Provide Employee or Manager as the work role; `super_admin=TRUE` independently grants HR access. Leave it blank/FALSE otherwise.
+2. Preserve employee IDs and manager IDs as text. Choose Employee, Manager, or Super Admin. Use `super_admin=TRUE` only to add HR access to a Manager account. Employee + Super Admin is rejected. A Super Admin role creates an HR account without the Employee role.
 3. Refer to managers using their employee IDs. A manager can already exist or appear later in the same workbook. Managers must be active and have the Manager role. Self-management and reporting cycles are rejected.
 4. Upload and review the validation preview. Fix all errors before confirming. An import creates new accounts only; existing or duplicate IDs/emails are rejected.
 5. Confirm within 30 minutes. The complete batch is revalidated under the administrator write guard and created atomically. Replaying a consumed preview is rejected.
@@ -58,6 +62,6 @@ The private links appear once. For a lost/expired link, choose **Create setup li
 
 ## Upgrade and validation
 
-Install `backend/requirements.lock`, migrate to Alembic head **mycareer**, regenerate OpenAPI/client types, and rebuild/restart the application as described in [Running](07-running.md). The migration adds calibration records and private attachment metadata. Previously finalized evaluations are carried forward as approved, and existing accounts and released results remain available. Back up private attachment storage together with the database.
+Install `backend/requirements.lock`, migrate to Alembic head **rolepolicy**, regenerate OpenAPI/client types, and rebuild/restart the application as described in [Running](07-running.md). The migration adds calibration records and private attachment metadata and removes the Employee role from any pre-existing Super Admin accounts while preserving their accounts, admin access, and appraisal records. Previously finalized evaluations are carried forward as approved, and existing released results remain available. Back up private attachment storage together with the database.
 
 Automated checks cover the existing authentication/appraisal workflow plus additive roles, HR authorization and own-result privacy, monitoring totals, form publication/binding, required custom questions and respondent boundaries, configurable scoring, import validation, revalidation and atomicity, one-time setup tokens, report values, and browser workflows. MySQL upgrade/downgrade/upgrade and schema drift checks are rehearsed against a disposable database. PDF layout is checked with synthetic long narratives and escaped markup.

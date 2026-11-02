@@ -23,6 +23,7 @@ from app.modules.appraisals.schemas import (
 )
 from app.modules.audit.models import AuditEvent
 from app.modules.forms.config import config_for, validate_employee
+from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.users.models import RoleCode, User
 
 FORM_VERSION = "workbook-ye2025-v1"
@@ -124,6 +125,19 @@ def activate(db, cycle, actor):
         )
     cycle.state = "ACTIVE"
     cycle.version += 1
+    settings = db.info.get("settings")
+    base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
+    for person_id in ids:
+        person = people[person_id]
+        manager = people.get(person.manager_id) or db.get(User, person.manager_id)
+        enqueue_email(
+            db,
+            settings,
+            f"Action needed: {cycle.title} appraisal is open",
+            f"Hello {person.full_name},\n\nYour appraisal cycle {cycle.title} is open. Please complete and submit your self-assessment by {cycle.submission_deadline:%d %b %Y, %H:%M} UTC.\n\nOpen MyCareer: {base_url}",
+            [person.email],
+            [manager.email] if manager else (),
+        )
     db.add(
         AuditEvent(
             actor_id=actor.user.id,
@@ -326,6 +340,18 @@ def submit(db, appraisal, actor):
             resource_id=appraisal.id,
             details={"revision": appraisal.content_revision},
         )
+    )
+    settings = db.info.get("settings")
+    base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
+    manager = db.get(User, appraisal.manager_id)
+    employee = db.get(User, appraisal.employee_id)
+    cycle = db.get(Cycle, appraisal.cycle_id)
+    enqueue_email(
+        db,
+        settings,
+        f"Employee appraisal submitted: {cycle.title}",
+        f"{employee.full_name} submitted a self-assessment for {cycle.title}. Please review it in MyCareer: {base_url}\n\nIf you feel the self-assessment needs changes, you can return it to the employee for revision from the review screen.",
+        [manager.email] if manager else [],
     )
     db.commit()
     return detail(db, appraisal)

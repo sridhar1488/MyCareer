@@ -1,3 +1,5 @@
+import asyncio
+import logging
 import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -17,12 +19,16 @@ from app.db.session import make_engine, session_factory
 from app.modules.appraisals.router import router as appraisal_router
 from app.modules.auth.router import router as auth_router
 from app.modules.forms.router import router as form_router
+from app.modules.help.router import router as help_router
 from app.modules.hr.calibrations import router as calibration_router
 from app.modules.hr.evaluations import router as evaluations_router
 from app.modules.hr.router import router as hr_router
 from app.modules.imports.router import router as import_router
+from app.modules.notifications.service import deliver_pending
 from app.modules.reviews.router import router as reviews_router
 from app.modules.users.router import router as admin_router
+
+logger = logging.getLogger(__name__)
 
 
 class SPAStaticFiles(StaticFiles):
@@ -40,8 +46,24 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(application):
-        yield
-        application.state.engine.dispose()
+        worker = asyncio.create_task(_mail_worker(application))
+        try:
+            yield
+        finally:
+            worker.cancel()
+            try:
+                await worker
+            except asyncio.CancelledError:
+                pass
+            application.state.engine.dispose()
+
+    async def _mail_worker(application):
+        while True:
+            try:
+                await deliver_pending(application.state.sessions, application.state.settings)
+            except Exception as exc:
+                logger.warning("Mail notification worker iteration failed (%s)", type(exc).__name__)
+            await asyncio.sleep(5)
 
     app = FastAPI(
         title="MyCareer API",
@@ -125,7 +147,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ready(request: Request) -> dict[str, str]:
         with request.app.state.engine.connect() as connection:
             revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-            if revision != "mycareer":
+            if revision != "rolepolicy":
                 raise AppError(503, "MIGRATION_REQUIRED", "Database migration is required.")
         return {"status": "ready"}
 
@@ -138,6 +160,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(import_router, prefix="/api/v1")
     app.include_router(evaluations_router, prefix="/api/v1")
     app.include_router(calibration_router, prefix="/api/v1")
+    app.include_router(help_router, prefix="/api/v1")
 
     if settings.static_directory:
         static_root = Path(settings.static_directory)

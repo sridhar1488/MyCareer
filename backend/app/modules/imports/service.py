@@ -49,7 +49,7 @@ def template():
         for row in range(2, 202):
             sheet.cell(row, col).number_format = "@"
     sheet.row_dimensions[1].height = 30
-    for column, values in [("G", "EMPLOYEE,MANAGER"), ("H", "TRUE,FALSE")]:
+    for column, values in [("G", "EMPLOYEE,MANAGER,SUPER_ADMIN"), ("H", "TRUE,FALSE")]:
         validation = DataValidation(type="list", formula1=f'"{values}"', allow_blank=True)
         sheet.add_data_validation(validation)
         validation.add(f"{column}2:{column}201")
@@ -58,8 +58,9 @@ def template():
         "MyCareer - new user import",
         "Fill Users with up to 200 new accounts. Do not change the header row.",
         "employee_id and manager_employee_id are text: retain leading zeros.",
-        "Role: EMPLOYEE or MANAGER. Blank means EMPLOYEE.",
-        "super_admin: TRUE adds HR / Super Admin access independently of the work role.",
+        "Role: EMPLOYEE, MANAGER, or SUPER_ADMIN. Blank means EMPLOYEE.",
+        "super_admin: TRUE adds HR / Super Admin access to a MANAGER account. Employee accounts cannot have this access.",
+        "Use SUPER_ADMIN for an HR account that does not also need the Manager role.",
         "manager_employee_id may identify an existing active Manager or another Manager in this file.",
         "Leave manager_employee_id blank for top-level managers or accounts awaiting assignment.",
         "Duplicates and reporting cycles are rejected. Existing accounts are never updated.",
@@ -162,8 +163,8 @@ def validate_rows(db, rows):
                 }
             )
             role = text(row.get("role")) or "EMPLOYEE"
-            if role not in ["EMPLOYEE", "MANAGER"]:
-                raise ValueError("Role must be EMPLOYEE or MANAGER")
+            if role not in ["EMPLOYEE", "MANAGER", "SUPER_ADMIN"]:
+                raise ValueError("Role must be EMPLOYEE, MANAGER, or SUPER_ADMIN")
             flag = row.get("super_admin")
             if isinstance(flag, str):
                 flag = flag.strip().upper()
@@ -172,6 +173,9 @@ def validate_rows(db, rows):
             ):
                 raise ValueError("super_admin must be TRUE or FALSE")
             admin = flag is True or flag == "TRUE"
+            if role == "EMPLOYEE" and admin:
+                raise ValueError("Employee accounts cannot be assigned Super Admin access")
+            admin = admin or role == "SUPER_ADMIN"
             manager = text(row.get("manager_employee_id"))
             identifier = profile.employee_id.casefold()
             email = profile.email.casefold()
@@ -239,12 +243,13 @@ def validate_rows(db, rows):
 
 def setup_token(db, user, settings):
     raw = opaque_token()
-    expires = utcnow() + timedelta(minutes=settings.reset_minutes)
+    expires = utcnow() + timedelta(minutes=settings.setup_link_minutes)
     db.add(PasswordToken(user_id=user.id, token_hash=token_hash(raw), expires_at=expires))
+    base_url = (settings.public_base_url or settings.allowed_origins[0]).rstrip("/")
     return {
         "user_id": user.id,
         "full_name": user.full_name,
         "email": user.email,
-        "setup_url": settings.allowed_origins[0] + "/#reset=" + raw,
+        "setup_url": base_url + "/#reset=" + raw,
         "expires_at": expires,
     }

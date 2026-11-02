@@ -43,41 +43,32 @@ def excel(records):
     summary.title = "Evaluations"
     summary.append(
         [
-            "Appraisal ID",
             "Cycle",
             "Employee ID",
             "Employee",
             "Department",
             "Manager",
             "Status",
-            "Approved UTC",
-            "Released UTC",
-            "Acknowledged UTC",
+            "Approved Date",
+            "Released Date",
+            "Acknowledged Date",
             "Overall / 5",
-            "Exact numerator",
-            "Exact denominator",
-            "Form version",
-            "Scoring policy",
         ]
     )
     scores = book.create_sheet("Section scores")
     scores.append(
         [
-            "Appraisal ID",
             "Section",
             "Enabled",
             "Weight %",
             "Rated items",
             "Average / 5",
             "Weighted score",
-            "Exact numerator",
-            "Exact denominator",
         ]
     )
     responses = book.create_sheet("Responses")
     responses.append(
         [
-            "Appraisal ID",
             "Section",
             "Question / item",
             "Response",
@@ -91,7 +82,6 @@ def excel(records):
         identity = result.identity_snapshot
         summary.append(
             [
-                appraisal.id,
                 cycle.title,
                 identity.get("employee_id", ""),
                 identity.get("employee_name", ""),
@@ -102,30 +92,22 @@ def excel(records):
                 result.released_at,
                 result.acknowledged_at,
                 float(result.score.overall.display),
-                result.score.overall.numerator,
-                result.score.overall.denominator,
-                result.form_definition.get("form_version_id", "workbook-ye2025-v1"),
-                result.score.policy_version,
             ]
         )
         for section in result.score.sections:
             scores.append(
                 [
-                    appraisal.id,
                     section.title,
                     section.enabled,
                     section.weight_percent,
                     section.rated_count,
                     float(section.average.display),
                     float(section.weighted.display),
-                    section.weighted.numerator,
-                    section.weighted.denominator,
                 ]
             )
         for title, label, text, rating in narratives(result):
             responses.append(
                 [
-                    appraisal.id,
                     title,
                     label,
                     text,
@@ -150,7 +132,7 @@ def excel(records):
                 elif hasattr(cell.value, "year"):
                     cell.number_format = "yyyy-mm-dd hh:mm"
                 elif isinstance(cell.value, float):
-                    cell.number_format = "0.00" if sheet == scores and cell.column == 7 else "0.0"
+                    cell.number_format = "0.00" if sheet == scores and cell.column == 6 else "0.0"
         for column in sheet.columns:
             sheet.column_dimensions[column[0].column_letter].width = 25 if sheet != responses else 38
         sheet.row_dimensions[1].height = 38

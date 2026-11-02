@@ -14,6 +14,7 @@ from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import Credential
 from app.modules.imports import service
 from app.modules.imports.models import ImportBatch
+from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.users import service as users
 from app.modules.users.models import RoleCode, User, UserRole
 
@@ -123,7 +124,30 @@ def confirm(batch_id: str, request: Request, actor: Identity = Depends(csrf), db
             Credential(user_id=user.id, password_hash=hasher.hash(opaque_token()), must_change_password=True)
         )
         created[row["employee_id"].casefold()] = user
-        links.append(service.setup_token(db, user, request.app.state.settings))
+        settings = request.app.state.settings
+        link = service.setup_token(db, user, settings)
+        links.append(link)
+        if settings.mail_enabled:
+            if settings.mail_test_mode:
+                setup_instructions = (
+                    "Mail is in test mode, so the working one-time setup link is withheld from this email. "
+                    "The administrator can securely share the private setup link from the completed import."
+                )
+            else:
+                setup_instructions = (
+                    f"Set your password using this one-time link: {link['setup_url']}\n"
+                    f"It expires at {link['expires_at']:%d %b %Y, %H:%M} UTC and can only be used once."
+                )
+            enqueue_email(
+                db,
+                settings,
+                "Welcome to MyCareer — set up your account",
+                f"Hello {user.full_name},\n\nYour MyCareer account has been created. "
+                "Use the secure account setup instructions below to choose your password. "
+                "Passwords must be 8–15 characters.\n\n"
+                f"{setup_instructions}\n\nIf you need help, contact your MyCareer administrator.",
+                [user.email],
+            )
         db.add(
             AuditEvent(
                 actor_id=actor.user.id,

@@ -18,6 +18,7 @@ cookie_scheme = APIKeyCookie(name="mi_session", auto_error=False)
 
 def get_db(request: Request):
     with request.app.state.sessions() as db:
+        db.info["settings"] = request.app.state.settings
         yield db
 
 

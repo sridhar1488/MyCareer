@@ -17,7 +17,7 @@ services:
       retries: 30
 
   migrate:
-    image: mycareer-app:1.0
+    image: mycareer-app:1.1
     restart: "no"
     environment:
       MI_ENVIRONMENT: production
@@ -32,7 +32,7 @@ services:
     profiles: ["tools"]
 
   app:
-    image: mycareer-app:1.0
+    image: mycareer-app:1.1
     restart: unless-stopped
     environment:
       MI_ENVIRONMENT: production
@@ -41,8 +41,20 @@ services:
       MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the public HTTPS origin}'
       MI_COOKIE_SECURE: "true"
       MI_ATTACHMENT_DIRECTORY: /srv/storage/appraisal-attachments
+      MI_MAIL_ENABLED: ${MI_MAIL_ENABLED:-false}
+      MI_MAIL_TEST_MODE: ${MI_MAIL_TEST_MODE:-true}
+      MI_MAIL_TEST_RECIPIENT: ${MI_MAIL_TEST_RECIPIENT:-}
+      MI_MAIL_FROM_ADDRESS: ${MI_MAIL_FROM_ADDRESS:-}
+      MI_MAIL_FROM_NAME: ${MI_MAIL_FROM_NAME:-MyCareer}
+      MI_SMTP_HOST: ${MI_SMTP_HOST:-}
+      MI_SMTP_PORT: ${MI_SMTP_PORT:-587}
+      MI_SMTP_USERNAME: ${MI_SMTP_USERNAME:-}
+      MI_SMTP_PASSWORD: ${MI_SMTP_PASSWORD:-}
+      MI_SMTP_STARTTLS: ${MI_SMTP_STARTTLS:-true}
+      MI_PUBLIC_BASE_URL: ${MI_PUBLIC_BASE_URL:-}
+      MI_SETUP_LINK_MINUTES: ${MI_SETUP_LINK_MINUTES:-1440}
     ports:
-      - "127.0.0.1:8080:8000"
+      - "8080:8000"
     volumes:
       - attachments:/srv/storage/appraisal-attachments
     depends_on:

@@ -8,6 +8,7 @@ from app.modules.appraisals.models import Appraisal, AppraisalHistory, Appraisal
 from app.modules.appraisals.schemas import AppraisalResponse
 from app.modules.audit.models import AuditEvent
 from app.modules.forms.config import config_for, text_errors
+from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.reviews import scoring
 from app.modules.reviews.models import (
     Acknowledgement,
@@ -18,7 +19,7 @@ from app.modules.reviews.models import (
     ReviewEvent,
 )
 from app.modules.reviews.schemas import EvaluationInput, ReleasedResult, ReviewResponse
-from app.modules.users.models import RoleCode
+from app.modules.users.models import RoleCode, User
 
 REVIEWABLE = {"SUBMITTED", "UNDER_REVIEW"}
 
@@ -256,6 +257,19 @@ def return_for_revision(db, appraisal, data, actor):
     if appraisal.state == "SUBMITTED":
         transition(db, appraisal, actor, "UNDER_REVIEW")
     transition(db, appraisal, actor, "RETURNED_FOR_REVISION", reason)
+    employee = db.get(User, appraisal.employee_id)
+    cycle = db.get(Cycle, appraisal.cycle_id)
+    settings = db.info.get("settings")
+    base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
+    deadline = f"{cycle.submission_deadline:%d %b %Y, %H:%M} UTC"
+    late_policy = "Late submissions are allowed." if cycle.allow_late_submission else "Late submissions are not allowed."
+    enqueue_email(
+        db,
+        settings,
+        f"Action needed: Revise your self-assessment — {cycle.title}",
+        f"Hello {employee.full_name},\n\n{actor.user.full_name} returned your self-assessment for {cycle.title} for revision.\n\nManager feedback:\n{reason}\n\nPlease update your self-assessment and resubmit it in MyCareer: {base_url}\n\nCycle deadline: {deadline}. {late_policy}",
+        [employee.email],
+    )
     db.commit()
     return detail(db, appraisal)
 
@@ -309,6 +323,19 @@ def finalize(db, appraisal, data, actor):
             actor_id=actor.user.id,
         )
     )
+    admins = db.scalars(select(User).where(User.active.is_(True))).all()
+    admins = [user for user in admins if RoleCode.SUPER_ADMIN in user.roles]
+    employee = db.get(User, appraisal.employee_id)
+    cycle = db.get(Cycle, appraisal.cycle_id)
+    settings = db.info.get("settings")
+    base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
+    enqueue_email(
+        db,
+        settings,
+        f"HR approval needed: {cycle.title}",
+        f"Manager {actor.user.full_name} submitted the evaluation for {employee.full_name} ({employee.employee_id}) in {cycle.title}. Review and approve it in MyCareer: {base_url}",
+        [user.email for user in admins],
+    )
     db.commit()
     return detail(db, appraisal)
 
@@ -339,6 +366,17 @@ def release(db, appraisal, data, actor):
             resource_id=appraisal.id,
             details={"review_meeting_confirmed": True},
         )
+    )
+    employee = db.get(User, appraisal.employee_id)
+    cycle = db.get(Cycle, appraisal.cycle_id)
+    settings = db.info.get("settings")
+    base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
+    enqueue_email(
+        db,
+        settings,
+        f"Your evaluation is available: {cycle.title}",
+        f"Hello {employee.full_name},\n\nYour manager has released your HR-approved evaluation for {cycle.title}. Sign in to MyCareer to view it: {base_url}",
+        [employee.email],
     )
     db.commit()
     return detail(db, appraisal)

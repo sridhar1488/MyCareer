@@ -11,11 +11,16 @@ from app.modules.users.schemas import DirectoryUser
 
 
 def assigned_roles(role, super_admin=False):
-    # Legacy SUPER_ADMIN requests remain compatible; new clients select a work
-    # role and independently grant administrative access.
-    work_role = RoleCode.EMPLOYEE if role == RoleCode.SUPER_ADMIN else role
-    values = [work_role.value]
-    if super_admin or role == RoleCode.SUPER_ADMIN:
+    if role == RoleCode.SUPER_ADMIN:
+        return [RoleCode.SUPER_ADMIN.value]
+    if role == RoleCode.EMPLOYEE and super_admin:
+        raise AppError(
+            422,
+            "EMPLOYEE_SUPER_ADMIN_FORBIDDEN",
+            "Employee accounts cannot be assigned Super Admin access. Choose HR / Super Admin or Manager.",
+        )
+    values = [role.value]
+    if super_admin:
         values.append(RoleCode.SUPER_ADMIN.value)
     return values
 

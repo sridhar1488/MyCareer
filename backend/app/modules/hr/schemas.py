@@ -55,3 +55,40 @@ class FilterOption(BaseModel):
 class MonitorOptions(BaseModel):
     cycles: list[FilterOption]
     managers: list[FilterOption]
+
+
+class AnalyticsSummary(BaseModel):
+    appraisal_count: int
+    approved_count: int
+    approval_percent: str
+    approved_average: str | None
+
+
+class DepartmentAnalytics(BaseModel):
+    department: str
+    appraisal_count: int
+    approved_count: int
+    approval_percent: str
+    average_score: str | None
+
+
+class TopPerformer(BaseModel):
+    employee_id: str
+    employee_name: str
+    department: str
+    manager_name: str
+    average_score: str
+    approved_appraisals: int
+
+
+class ScorePoint(BaseModel):
+    employee_id: str
+    employee_name: str
+    score: str
+
+
+class AnalyticsResponse(BaseModel):
+    summary: AnalyticsSummary
+    departments: list[DepartmentAnalytics]
+    top_performers: list[TopPerformer]
+    score_points: list[ScorePoint]

@@ -16,6 +16,7 @@ from app.modules.auth.models import PasswordToken as PasswordToken
 from app.modules.auth.models import RateLimit as RateLimit
 from app.modules.forms.models import FormTemplate as FormTemplate
 from app.modules.imports.models import ImportBatch as ImportBatch
+from app.modules.notifications.models import NotificationOutbox as NotificationOutbox
 from app.modules.reviews.models import Acknowledgement as Acknowledgement
 from app.modules.reviews.models import CalibrationDraft as CalibrationDraft
 from app.modules.reviews.models import CalibrationEvent as CalibrationEvent
