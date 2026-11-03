@@ -1,4 +1,5 @@
-from datetime import datetime
+from datetime import date, datetime
+from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, SecretStr, StrictBool, field_validator
 
@@ -12,15 +13,22 @@ class ProfileInput(StrictInput):
     email: EmailStr = Field(max_length=254)
     department: str = Field(min_length=1, max_length=100)
     designation: str = Field(min_length=1, max_length=100)
-    country: str = Field(min_length=1, max_length=80)
+    country: str = Field(default="", max_length=80)
+    location: str = Field(default="", max_length=120)
+    date_joined: date | None = None
 
-    @field_validator("full_name", "employee_id", "department", "designation", "country")
+    @field_validator("full_name", "employee_id", "department", "designation")
     @classmethod
     def nonblank(cls, value):
         value = value.strip()
         if not value:
             raise ValueError("A nonblank value is required")
         return value
+
+    @field_validator("country", "location")
+    @classmethod
+    def normalize_optional_text(cls, value):
+        return value.strip()
 
     @field_validator("email")
     @classmethod
@@ -50,6 +58,15 @@ class VersionInput(StrictInput):
     expected_version: int = Field(ge=1)
 
 
+class SetupLinkResponse(BaseModel):
+    user_id: str
+    full_name: str
+    email: str
+    setup_url: str
+    expires_at: datetime
+    email_status: Literal["queued", "test_only", "disabled"]
+
+
 class ChangeRole(VersionInput):
     role: RoleCode
     super_admin: StrictBool = False
@@ -76,6 +93,8 @@ class DirectoryUser(BaseModel):
     department: str
     designation: str
     country: str
+    location: str
+    date_joined: date | None
     roles: list[str]
     manager_id: str | None
     manager_name: str | None

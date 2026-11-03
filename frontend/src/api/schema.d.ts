@@ -1241,8 +1241,18 @@ export interface components {
             department: string;
             /** Designation */
             designation: string;
-            /** Country */
+            /**
+             * Country
+             * @default
+             */
             country: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /** Date Joined */
+            date_joined?: string | null;
             role: components["schemas"]["RoleCode"];
             /**
              * Super Admin
@@ -1445,6 +1455,10 @@ export interface components {
             designation: string;
             /** Country */
             country: string;
+            /** Location */
+            location: string;
+            /** Date Joined */
+            date_joined: string | null;
             /** Roles */
             roles: string[];
             /** Manager Id */
@@ -1478,8 +1492,18 @@ export interface components {
             department: string;
             /** Designation */
             designation: string;
-            /** Country */
+            /**
+             * Country
+             * @default
+             */
             country: string;
+            /**
+             * Location
+             * @default
+             */
+            location: string;
+            /** Date Joined */
+            date_joined?: string | null;
             /** Expected Version */
             expected_version: number;
         };
@@ -2127,6 +2151,27 @@ export interface components {
              * Format: date-time
              */
             expires_at: string;
+        };
+        /** SetupLinkResponse */
+        SetupLinkResponse: {
+            /** User Id */
+            user_id: string;
+            /** Full Name */
+            full_name: string;
+            /** Email */
+            email: string;
+            /** Setup Url */
+            setup_url: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+            /**
+             * Email Status
+             * @enum {string}
+             */
+            email_status: "queued" | "test_only" | "disabled";
         };
         /** TeamPage */
         TeamPage: {
@@ -3232,7 +3277,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["SetupLinkResponse"];
                 };
             };
             /** @description Bad Request */
@@ -4585,7 +4630,9 @@ export interface operations {
     };
     download_attachment_api_v1_appraisals__appraisal_id__attachments__attachment_id__get: {
         parameters: {
-            query?: never;
+            query?: {
+                inline?: boolean;
+            };
             header?: never;
             path: {
                 appraisal_id: string;

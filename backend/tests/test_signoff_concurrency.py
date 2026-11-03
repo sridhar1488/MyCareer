@@ -40,11 +40,7 @@ def test_concurrent_finalize_and_competing_write_have_one_winner(concurrent_app,
 
     def attempt(i):
         if i == 0 or competing_action == "finalize":
-            return (
-                clients[i]
-                .post(base + "/finalize", json=data)
-                .status_code
-            )
+            return clients[i].post(base + "/finalize", json=data).status_code
         if competing_action == "return":
             return clients[i].post(base + "/return", json={**data, "reason": "Clarify results"}).status_code
         return (
@@ -59,7 +55,10 @@ def test_concurrent_finalize_and_competing_write_have_one_winner(concurrent_app,
     with app.state.sessions() as db:
         record = db.get(Appraisal, a.id)
         count = db.scalar(select(func.count()).select_from(FinalEvaluation))
-        assert record.state == "HR_REVIEW" and count == 0
+        expected_state = "HR_REVIEW"
+        if competing_action != "finalize" and statuses[0] != 200:
+            expected_state = "RETURNED_FOR_REVISION" if competing_action == "return" else "UNDER_REVIEW"
+        assert record.state == expected_state and count == 0
     for client in clients:
         client.close()
 
@@ -80,7 +79,10 @@ def test_release_once_and_acknowledgement_idempotent_under_concurrency(concurren
         calibration = hr.get(f"/api/v1/hr/calibrations/{a.id}").json()
         approved = hr.post(
             f"/api/v1/hr/calibrations/{a.id}/approve",
-            json={"expected_version": calibration["version"], "submitted_revision": calibration["submitted_revision"]},
+            json={
+                "expected_version": calibration["version"],
+                "submitted_revision": calibration["submitted_revision"],
+            },
         )
         assert approved.status_code == 200, approved.text
         score = approved.json()["score"]
@@ -94,24 +96,26 @@ def test_release_once_and_acknowledgement_idempotent_under_concurrency(concurren
     clients = [login(app, manager), login(app, manager)]
 
     def release(i):
-        return (
-            clients[i]
-            .post(base + "/release", json=release_body)
-            .status_code
-        )
+        return clients[i].post(base + "/release", json=release_body).status_code
 
     with ThreadPoolExecutor(max_workers=2) as workers:
         assert sorted(workers.map(release, range(2))) == [200, 409]
     for client in clients:
         client.close()
+    with login(app, manager) as manager_client:
+        current_version = manager_client.get(base).json()["appraisal"]["version"]
     clients = [login(app, employee), login(app, employee)]
 
     def acknowledge(i):
-        return clients[i].post(f"/api/v1/appraisals/{a.id}/acknowledge", json={"expected_version": 6})
+        return clients[i].post(
+            f"/api/v1/appraisals/{a.id}/acknowledge", json={"expected_version": current_version}
+        )
 
     with ThreadPoolExecutor(max_workers=2) as workers:
         responses = list(workers.map(acknowledge, range(2)))
-    assert all(r.status_code == 200 and r.json()["score"] == score for r in responses)
+    assert all(r.status_code == 200 and r.json()["score"] == score for r in responses), [
+        (r.status_code, r.text) for r in responses
+    ]
     with app.state.sessions() as db:
         assert db.scalar(select(func.count()).select_from(Acknowledgement)) == 1
     for client in clients:

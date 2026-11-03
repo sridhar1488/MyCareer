@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
@@ -55,7 +55,7 @@ def download_template():
     return Response(
         service.template(),
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": 'attachment; filename="MI-LeapMetrics-user-import.xlsx"'},
+        headers={"Content-Disposition": 'attachment; filename="MyCareer-HRMS-user-import.xlsx"'},
     )
 
 
@@ -110,15 +110,23 @@ def confirm(batch_id: str, request: Request, actor: Identity = Depends(csrf), db
         user = User(
             **{
                 key: row[key]
-                for key in ["full_name", "employee_id", "email", "department", "designation", "country"]
+                for key in [
+                    "full_name",
+                    "employee_id",
+                    "email",
+                    "department",
+                    "designation",
+                    "country",
+                    "location",
+                ]
             },
+            date_joined=date.fromisoformat(row["date_joined"]) if row["date_joined"] else None,
             department_id=department.id,
         )
         db.add(user)
         db.flush()
         db.add_all(
-            UserRole(user_id=user.id, role_code=role)
-            for role in users.assigned_roles(RoleCode(row["role"]), row["super_admin"])
+            UserRole(user_id=user.id, role_code=role) for role in users.assigned_roles(RoleCode(row["role"]))
         )
         db.add(
             Credential(user_id=user.id, password_hash=hasher.hash(opaque_token()), must_change_password=True)
@@ -155,7 +163,7 @@ def confirm(batch_id: str, request: Request, actor: Identity = Depends(csrf), db
                 resource_id=user.id,
                 details={
                     "import_batch": batch.id,
-                    "roles": users.assigned_roles(RoleCode(row["role"]), row["super_admin"]),
+                    "roles": users.assigned_roles(RoleCode(row["role"])),
                 },
             )
         )

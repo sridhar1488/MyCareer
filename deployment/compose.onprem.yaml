@@ -4,8 +4,8 @@ services:
     image: mysql:8.4.11@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364
     restart: unless-stopped
     environment:
-      MYSQL_DATABASE: mycareer
-      MYSQL_USER: mycareer
+      MYSQL_DATABASE: ${MI_DATABASE_NAME:?Set MI_DATABASE_NAME to the existing database name}
+      MYSQL_USER: ${MI_DATABASE_USER:?Set MI_DATABASE_USER to the existing database user}
       MYSQL_PASSWORD: ${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}
       MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
     volumes:
@@ -21,7 +21,7 @@ services:
     restart: "no"
     environment:
       MI_ENVIRONMENT: production
-      MI_DATABASE_URL: mysql+pymysql://mycareer:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/mycareer?charset=utf8mb4
+      MI_DATABASE_URL: mysql+pymysql://${MI_DATABASE_USER:?Set MI_DATABASE_USER}:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/${MI_DATABASE_NAME:?Set MI_DATABASE_NAME}?charset=utf8mb4
       MI_SECRET_KEY: ${MI_SECRET_KEY:?Set MI_SECRET_KEY}
       MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the public HTTPS origin}'
       MI_COOKIE_SECURE: "true"
@@ -36,7 +36,7 @@ services:
     restart: unless-stopped
     environment:
       MI_ENVIRONMENT: production
-      MI_DATABASE_URL: mysql+pymysql://mycareer:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/mycareer?charset=utf8mb4
+      MI_DATABASE_URL: mysql+pymysql://${MI_DATABASE_USER:?Set MI_DATABASE_USER}:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/${MI_DATABASE_NAME:?Set MI_DATABASE_NAME}?charset=utf8mb4
       MI_SECRET_KEY: ${MI_SECRET_KEY:?Set MI_SECRET_KEY}
       MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the public HTTPS origin}'
       MI_COOKIE_SECURE: "true"
@@ -52,7 +52,7 @@ services:
       MI_SMTP_PASSWORD: ${MI_SMTP_PASSWORD:-}
       MI_SMTP_STARTTLS: ${MI_SMTP_STARTTLS:-true}
       MI_PUBLIC_BASE_URL: ${MI_PUBLIC_BASE_URL:-}
-      MI_SETUP_LINK_MINUTES: ${MI_SETUP_LINK_MINUTES:-1440}
+      MI_SETUP_LINK_MINUTES: ${MI_SETUP_LINK_MINUTES:-10080}
     ports:
       - "8080:8000"
     volumes:
@@ -63,4 +63,10 @@ services:
 
 volumes:
   database:
+    # Require an explicit existing/new volume name. This prevents a project-name
+    # change from silently creating a second, empty database during upgrades.
+    external: true
+    name: ${MI_DATABASE_VOLUME:?Set MI_DATABASE_VOLUME to the existing database volume name}
   attachments:
+    external: true
+    name: ${MI_ATTACHMENTS_VOLUME:?Set MI_ATTACHMENTS_VOLUME to the existing attachments volume name}

@@ -262,7 +262,11 @@ def return_for_revision(db, appraisal, data, actor):
     settings = db.info.get("settings")
     base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
     deadline = f"{cycle.submission_deadline:%d %b %Y, %H:%M} UTC"
-    late_policy = "Late submissions are allowed." if cycle.allow_late_submission else "Late submissions are not allowed."
+    late_policy = (
+        "Late submissions are allowed."
+        if cycle.allow_late_submission
+        else "Late submissions are not allowed."
+    )
     enqueue_email(
         db,
         settings,

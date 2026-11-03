@@ -8,7 +8,7 @@ from sqlalchemy import select
 from app.modules.appraisals.models import FormVersion
 from app.modules.forms.config import config_for
 from app.modules.forms.schemas import FormConfig
-from app.modules.imports.service import COLUMNS, read_file, template
+from app.modules.imports.service import COLUMNS, FIELDS, read_file, template
 from app.modules.users.models import UserRole
 from tests.test_directory_appraisals import cycle_body, draft, headers, profile
 from tests.test_directory_appraisals import setup_appraisal as setup_appraisal
@@ -19,8 +19,18 @@ from tests.test_manager_reviews import submitted_review as submitted_review
 def workbook_bytes(rows):
     book = load_workbook(BytesIO(template()))
     for i, row in enumerate(rows, 2):
-        for j, key in enumerate(COLUMNS, 1):
-            book["Users"].cell(i, j, row.get(key, ""))
+        values = {
+            "employee_id": row.get("employee_id", ""),
+            "full_name": row.get("full_name", ""),
+            "email": row.get("email", ""),
+            "location": row.get("location", ""),
+            "department": row.get("department", ""),
+            "designation": row.get("designation", ""),
+            "reporting_to": row.get("reporting_to", row.get("manager_employee_id", "")),
+            "date_joined": row.get("date_joined", ""),
+        }
+        for j, key in enumerate(FIELDS, 1):
+            book["Users"].cell(i, j, values[key])
     stream = BytesIO()
     book.save(stream)
     return stream.getvalue()
@@ -129,7 +139,19 @@ def test_approved_report_access_and_own_privacy(client, signin, submitted_review
     excel = client.get("/api/v1/hr/evaluations/export/xlsx")
     assert excel.status_code == 200, excel.text[:200]
     book = load_workbook(BytesIO(excel.content))
-    assert book["Evaluations"]["K2"].value == 3.8
+    assert [cell.value for cell in book["Evaluations"][1]] == [
+        "Cycle",
+        "Employee ID",
+        "Employee",
+        "Department",
+        "Manager",
+        "Status",
+        "Approved Date",
+        "Released Date",
+        "Acknowledged Date",
+        "Overall / 5",
+    ]
+    assert book["Evaluations"]["J2"].value == 3.8
     assert book["Responses"].max_row > 10
     assert client.get("/api/v1/hr/evaluations/export/pdf").content.startswith(b"%PDF")
     assert client.get("/api/v1/hr/evaluations/export/xlsx?q=no-match").status_code == 200
@@ -153,10 +175,11 @@ def test_bulk_preview_confirm_and_replay(client, signin, user_factory, factory):
     rows = [
         {
             **profile(employee_id="001", email="one@example.org"),
-            "role": "EMPLOYEE",
-            "manager_employee_id": "002",
+            "location": "Bengaluru",
+            "date_joined": "2020-02-03",
+            "reporting_to": "002",
         },
-        {**profile(employee_id="002", email="two@example.org"), "role": "MANAGER", "super_admin": True},
+        {**profile(employee_id="002", email="two@example.org")},
     ]
     preview = client.post("/api/v1/admin/user-imports/preview", content=workbook_bytes(rows), headers=h)
     assert preview.status_code == 200, preview.text
@@ -169,6 +192,10 @@ def test_bulk_preview_confirm_and_replay(client, signin, user_factory, factory):
     assert client.post(f"/api/v1/admin/user-imports/{batch}/confirm", headers=h).status_code == 409
     page = client.get("/api/v1/admin/users?q=001").json()
     assert page["items"][0]["employee_id"] == "001" and page["items"][0]["manager_id"]
+    assert page["items"][0]["location"] == "Bengaluru"
+    assert page["items"][0]["date_joined"] == "2020-02-03"
+    manager = client.get("/api/v1/admin/users?q=002").json()["items"][0]
+    assert manager["roles"] == ["MANAGER"]
     duplicate = client.post(
         "/api/v1/admin/user-imports/preview", content=workbook_bytes(rows), headers=h
     ).json()
@@ -179,9 +206,9 @@ def test_bulk_preview_confirm_and_replay(client, signin, user_factory, factory):
 def test_reject_unsafe_import(attack):
     from app.core.errors import AppError
 
-    data = workbook_bytes([{**profile(), "role": "EMPLOYEE"}])
+    data = workbook_bytes([profile()])
     if attack == "formula":
-        data = workbook_bytes([{**profile(full_name="=1+1"), "role": "EMPLOYEE"}])
+        data = workbook_bytes([profile(full_name="=1+1")])
     if attack == "bad_zip":
         data = b"not a workbook"
     if attack == "empty":
@@ -305,8 +332,8 @@ def test_bulk_atomic_revalidation_and_operator_isolation(client, signin, user_fa
     second = user_factory("SUPER_ADMIN")
     h = headers(signin, first)
     rows = [
-        {**profile(employee_id="NEW-A", email="a@example.org"), "role": "EMPLOYEE"},
-        {**profile(employee_id="NEW-B", email="b@example.org"), "role": "EMPLOYEE"},
+        {**profile(employee_id="NEW-A", email="a@example.org")},
+        {**profile(employee_id="NEW-B", email="b@example.org")},
     ]
     preview = client.post(
         "/api/v1/admin/user-imports/preview", content=workbook_bytes(rows), headers=h
@@ -342,7 +369,7 @@ def test_import_setup_link_works_once_and_is_hashed(client, signin, user_factory
     h = headers(signin, admin)
     preview = client.post(
         "/api/v1/admin/user-imports/preview",
-        content=workbook_bytes([{**profile(), "role": "EMPLOYEE"}]),
+        content=workbook_bytes([profile()]),
         headers=h,
     ).json()
     created = client.post(f"/api/v1/admin/user-imports/{preview['batch_id']}/confirm", headers=h).json()
@@ -357,13 +384,19 @@ def test_import_setup_link_works_once_and_is_hashed(client, signin, user_factory
     assert client.post("/api/v1/auth/complete-password-setup", json=body).status_code == 400
 
 
-@pytest.mark.parametrize("invalid", [1, "perhaps"])
-def test_bulk_rejects_ambiguous_admin_flag(client, signin, user_factory, invalid):
+@pytest.mark.parametrize("legacy_header", ["Role", "Super Admin"])
+def test_hrms_import_rejects_legacy_role_columns(client, signin, user_factory, legacy_header):
     h = headers(signin, user_factory("SUPER_ADMIN"))
+    book = load_workbook(BytesIO(workbook_bytes([profile()])))
+    sheet = book["Users"]
+    sheet.cell(1, len(COLUMNS) + 1, legacy_header)
+    sheet.cell(2, len(COLUMNS) + 1, "SUPER_ADMIN")
+    stream = BytesIO()
+    book.save(stream)
     response = client.post(
         "/api/v1/admin/user-imports/preview",
-        content=workbook_bytes([{**profile(), "role": "EMPLOYEE", "super_admin": invalid}]),
+        content=stream.getvalue(),
         headers=h,
     )
-    assert response.status_code == 200
-    assert response.json()["batch_id"] is None and response.json()["errors"]
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "INVALID_IMPORT"

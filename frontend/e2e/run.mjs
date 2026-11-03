@@ -5,7 +5,8 @@ import { setTimeout } from 'node:timers/promises';
 // Own the process trees explicitly: Windows Python venv launchers create child interpreters.
 const children = [];
 const env = { ...process.env,
-  MI_E2E_PASSWORD: randomBytes(32).toString('base64url'),
+  // A valid disposable password for the application's 8–15 character policy.
+  MI_E2E_PASSWORD: randomBytes(6).toString('base64url'),
   MI_E2E_RESET_TOKEN: randomBytes(48).toString('base64url') };
 function start(args) {
   const child = spawn(process.execPath, args, { env, stdio: 'inherit', detached: process.platform !== 'win32' });

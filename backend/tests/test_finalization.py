@@ -88,9 +88,12 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
         ("/finalize", client.post, command(review)),
     ]:
         assert method(path + suffix, json=body, headers=h).status_code == 409
-    assert client.post(
-        path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h
-    ).status_code == 409
+    assert (
+        client.post(
+            path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h
+        ).status_code
+        == 409
+    )
     eh = headers(signin, employee)
     assert client.get(own + "/released-result").status_code == 404
     assert "evaluation" not in client.get(own).json()
@@ -104,14 +107,23 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
     h = headers(signin, manager)
     review = client.get(path, headers=h).json()
     score = review["final_result"]["score"]
-    missing_meeting = client.post(path + "/release", json={**command(review), "review_meeting_confirmed": False}, headers=h)
-    assert missing_meeting.status_code == 422 and missing_meeting.json()["error"]["code"] == "MEETING_REQUIRED"
+    missing_meeting = client.post(
+        path + "/release", json={**command(review), "review_meeting_confirmed": False}, headers=h
+    )
+    assert (
+        missing_meeting.status_code == 422 and missing_meeting.json()["error"]["code"] == "MEETING_REQUIRED"
+    )
     release_body = {**command(review), "review_meeting_confirmed": True}
     released = client.post(path + "/release", json=release_body, headers=h)
     assert released.status_code == 200, released.text
     review = released.json()
     assert review["final_result"]["score"] == score
-    assert client.post(path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h).status_code == 409
+    assert (
+        client.post(
+            path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h
+        ).status_code
+        == 409
+    )
     eh = headers(signin, employee)
     result = client.get(own + "/released-result").json()
     assert result["score"] == score and result["released_at"] and not result["acknowledged_at"]
@@ -169,7 +181,9 @@ def test_approved_results_do_not_recalculate_when_policy_registry_changes(
     with factory.begin() as db:
         db.get(Cycle, review["appraisal"]["cycle_id"]).scoring_policy_version = "future-policy"
     assert client.get(path).json()["final_result"]["score"] == score
-    released = client.post(path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h)
+    released = client.post(
+        path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h
+    )
     assert released.status_code == 200 and released.json()["final_result"]["score"] == score
     headers(signin, employee)
     assert (

@@ -98,7 +98,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
-        response.headers["Cache-Control"] = "no-store"
+        if "Cache-Control" not in response.headers:
+            response.headers["Cache-Control"] = "no-store"
         if not request.url.path.startswith("/api/"):
             response.headers["Content-Security-Policy"] = (
                 "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -147,7 +148,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def ready(request: Request) -> dict[str, str]:
         with request.app.state.engine.connect() as connection:
             revision = connection.scalar(text("SELECT version_num FROM alembic_version"))
-            if revision != "rolepolicy":
+            if revision != "hrmsmaster":
                 raise AppError(503, "MIGRATION_REQUIRED", "Database migration is required.")
         return {"status": "ready"}
 

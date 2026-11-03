@@ -14,7 +14,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByRole('button', { name: 'User directory', exact: true }).click();
   await page.getByRole('button', { name: 'Create user', exact: true }).click();
-  for (const [label, value] of [['Full name', name], ['Employee ID', employeeId], ['Work email', email], ['Department', 'Engineering'], ['Designation', 'Engineer'], ['Country', 'India']]) {
+  for (const [label, value] of [['Full name', name], ['Employee ID', employeeId], ['Work email', email], ['Department', 'Engineering'], ['Job title', 'Engineer'], ['Country', 'India']]) {
     await page.getByLabel(label, { exact: true }).fill(value);
   }
   await page.getByLabel('Find a manager').fill('E2E-manager');
@@ -43,8 +43,8 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByLabel('Password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await page.getByLabel('Current password').fill(password);
-  await page.getByLabel('New password', { exact: true }).fill(`${password}-personal`);
-  await page.getByLabel('Confirm new password').fill(`${password}-personal`);
+  await page.getByLabel('New password', { exact: true }).fill(`${password}-person`);
+  await page.getByLabel('Confirm new password').fill(`${password}-person`);
   await page.getByRole('button', { name: 'Save new password', exact: true }).click();
   await page.getByRole('button', { name: 'Open self-assessment', exact: true }).click();
   for (let i = 0; i < 7; i++) {

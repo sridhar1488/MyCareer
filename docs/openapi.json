@@ -1104,7 +1104,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/SetupLinkResponse"
+                }
               }
             }
           },
@@ -2919,6 +2921,16 @@
             "schema": {
               "type": "string",
               "title": "Attachment Id"
+            }
+          },
+          {
+            "name": "inline",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "boolean",
+              "default": false,
+              "title": "Inline"
             }
           }
         ],
@@ -9644,8 +9656,26 @@
           "country": {
             "type": "string",
             "maxLength": 80,
-            "minLength": 1,
-            "title": "Country"
+            "title": "Country",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Location",
+            "default": ""
+          },
+          "date_joined": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Joined"
           },
           "role": {
             "$ref": "#/components/schemas/RoleCode"
@@ -9683,7 +9713,6 @@
           "email",
           "department",
           "designation",
-          "country",
           "role",
           "temporary_password"
         ],
@@ -10076,6 +10105,22 @@
             "type": "string",
             "title": "Country"
           },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
+          "date_joined": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Joined"
+          },
           "roles": {
             "items": {
               "type": "string"
@@ -10140,6 +10185,8 @@
           "department",
           "designation",
           "country",
+          "location",
+          "date_joined",
           "roles",
           "manager_id",
           "manager_name",
@@ -10185,8 +10232,26 @@
           "country": {
             "type": "string",
             "maxLength": 80,
-            "minLength": 1,
-            "title": "Country"
+            "title": "Country",
+            "default": ""
+          },
+          "location": {
+            "type": "string",
+            "maxLength": 120,
+            "title": "Location",
+            "default": ""
+          },
+          "date_joined": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Date Joined"
           },
           "expected_version": {
             "type": "integer",
@@ -10202,7 +10267,6 @@
           "email",
           "department",
           "designation",
-          "country",
           "expected_version"
         ],
         "title": "EditUser"
@@ -11924,6 +11988,50 @@
           "expires_at"
         ],
         "title": "SetupLink"
+      },
+      "SetupLinkResponse": {
+        "properties": {
+          "user_id": {
+            "type": "string",
+            "title": "User Id"
+          },
+          "full_name": {
+            "type": "string",
+            "title": "Full Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "setup_url": {
+            "type": "string",
+            "title": "Setup Url"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Expires At"
+          },
+          "email_status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "test_only",
+              "disabled"
+            ],
+            "title": "Email Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "full_name",
+          "email",
+          "setup_url",
+          "expires_at",
+          "email_status"
+        ],
+        "title": "SetupLinkResponse"
       },
       "TeamPage": {
         "properties": {

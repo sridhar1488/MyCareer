@@ -79,6 +79,8 @@ def directory_user(db, user):
         department=user.department,
         designation=user.designation,
         country=user.country,
+        location=user.location,
+        date_joined=user.date_joined,
         roles=user.roles,
         manager_id=user.manager_id,
         manager_name=manager.full_name if manager else None,

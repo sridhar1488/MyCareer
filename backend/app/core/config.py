@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     session_hours: int = Field(default=8, ge=1, le=24)
     session_idle_minutes: int = Field(default=30, ge=1, le=120)
     reset_minutes: int = Field(default=30, ge=5, le=60)
-    setup_link_minutes: int = Field(default=1440, ge=5, le=1440)
+    setup_link_minutes: int = Field(default=10080, ge=5, le=43200)
     login_attempts: int = Field(default=10, ge=1, le=100)
     rate_window_seconds: int = Field(default=900, ge=10, le=3600)
     attachment_directory: str = ".local/appraisal-attachments"

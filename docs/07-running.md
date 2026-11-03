@@ -121,7 +121,7 @@ The on-prem package builds the React UI and FastAPI API into one `mycareer-app` 
 
 The Linux `amd64` image is built as version 1.1. The transferable archive is `deployment/mycareer-app_1.1_linux_amd64.tar` (about 80 MB). The app image is for Linux x86-64 servers; verify the target with `uname -m` (`x86_64` is expected). `deployment/compose.onprem.yaml` defines MySQL, migrations and the app. The app port is published on all host interfaces at `8080` so a network TLS proxy can reach it. Set `MI_ALLOWED_ORIGINS` and `MI_PUBLIC_BASE_URL` to the exact HTTPS app origin/hostname; never use a wildcard or a localhost value in an on-prem deployment. Install Docker Engine and the Compose v2 plugin using the official instructions for the target Linux distribution; for Ubuntu, see [Docker Engine on Ubuntu](https://docs.docker.com/engine/install/ubuntu/). Restrict cleartext port 8080 to trusted proxy/network sources with host or network firewall rules, and expose HTTPS to users.
 
-### First installation on an Ubuntu/Debian-style Linux server
+### Installation or upgrade on an Ubuntu/Debian-style Linux server
 
 1. Install and start Docker Engine with the Compose v2 plugin, following the official instructions for the exact Linux distribution. Confirm `sudo docker version` and `sudo docker compose version` work. Keep administrative access restricted; membership in the `docker` group grants root-equivalent control of the host.
 2. Copy these files from this workspace to the server, for example with SCP or an approved file transfer tool:
@@ -135,12 +135,19 @@ sudo mkdir -p /opt/mycareer
 sudo chown "$USER":"$USER" /opt/mycareer
 cd /opt/mycareer
 # Place the three copied files in this directory, then:
-sudo docker load --input mycareer-app_1.0_linux_amd64.tar
+sudo docker load --input mycareer-app_1.1_linux_amd64.tar
 cp onprem.env.example .env
 chmod 600 .env
 ```
 
-4. Generate three separate secrets and edit `.env` locally on the server. Use fresh hexadecimal values for both database passwords and the application secret:
+4. Before starting an existing installation, inspect its volumes and preserve their exact names. Older installations may use names prefixed with `mi-leapmetrics_`; the newer project may use `mycareer_`. Never select a new empty volume for an existing installation. Set `MI_DATABASE_VOLUME` and `MI_ATTACHMENTS_VOLUME` in `.env` to the existing names, and keep `MI_DATABASE_NAME` and `MI_DATABASE_USER` equal to the old database settings. For an older `mi-leapmetrics` deployment these may be `mi-leapmetrics_database`, `mi-leapmetrics_attachments`, `leapmetrics`, and `leapmetrics`, respectively. For a first installation, keep the `mycareer_database`, `mycareer_attachments`, `mycareer`, and `mycareer` values from the example and create the volumes explicitly:
+
+```sh
+sudo docker volume create mycareer_database
+sudo docker volume create mycareer_attachments
+```
+
+5. Generate three separate secrets and edit `.env` locally on the server. Use fresh hexadecimal values for both database passwords and the application secret:
 
 ```sh
 openssl rand -hex 32
@@ -149,7 +156,7 @@ openssl rand -hex 32
 ```
 
    Put the first two values in `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`; use the third for `MI_SECRET_KEY`. Set the exact HTTPS origin as a JSON array, for example `MI_ALLOWED_ORIGINS=["https://mycareer.example.local"]`. Do not reuse development secrets, put secrets in shell history, or commit `.env`.
-5. Check the Compose configuration and initialize the database schema, then start the app:
+6. Check the Compose configuration and initialize the database schema, then start the app:
 
 ```sh
 sudo docker compose --env-file .env -f compose.onprem.yaml config --quiet
@@ -159,8 +166,8 @@ sudo docker compose --env-file .env -f compose.onprem.yaml up -d app
 sudo docker compose --env-file .env -f compose.onprem.yaml ps
 ```
 
-6. Configure the TLS reverse proxy and certificate. It must forward the original `Host` header to the server's app listener on port 8080. The app port is bound on all interfaces; restrict its cleartext access to the trusted reverse proxy using host/network firewall rules. Do not publish MySQL. Allow inbound HTTPS at the host/network firewall. Production uses secure cookies and rejects non-HTTPS origins.
-7. Verify readiness through the HTTPS proxy, then create the first application administrator:
+7. Configure the TLS reverse proxy and certificate. It must forward the original `Host` header to the server's app listener on port 8080. The app port is bound on all interfaces; restrict its cleartext access to the trusted reverse proxy using host/network firewall rules. Do not publish MySQL. Allow inbound HTTPS at the host/network firewall. Production uses secure cookies and rejects non-HTTPS origins.
+8. Verify readiness through the HTTPS proxy, then create the first application administrator:
 
 ```sh
 curl --fail --show-error https://mycareer.example.local/api/v1/health/ready
@@ -171,30 +178,32 @@ sudo docker compose --env-file .env -f compose.onprem.yaml exec -it app \
 
    The bootstrap command prompts privately for a temporary password. Sign in and change it. Create subsequent accounts and appraisal cycles from the application.
 
-MySQL and appraisal attachments persist in Compose volumes named `mycareer_database` and `mycareer_attachments`. Set up tested backups of both before production use and before every upgrade. Never run `docker compose down -v` on a live installation. For an upgrade, load the replacement image, back up both volumes, run the migration command, recreate the app container, and verify readiness.
+MySQL and appraisal attachments persist in explicitly named external Compose volumes selected by `MI_DATABASE_VOLUME` and `MI_ATTACHMENTS_VOLUME`; database name and user are explicit in `MI_DATABASE_NAME` and `MI_DATABASE_USER`. This avoids silently selecting a different volume or database when the Compose project name, folder or product name changes. Compose fails if required values are missing or selected volumes do not exist. Set up tested backups of both volumes before production use and every upgrade. Never run `docker compose down -v` on a live installation. For an upgrade, keep the existing volume names and database settings, back up both volumes, load the replacement image, run the migration command, recreate the app container, and verify readiness and known accounts before releasing the service.
 
 ### Lifecycle email alerts
 
-The API queues lifecycle notifications in the same database transaction as the appraisal action, then sends them through the configured company SMTP relay. Failed deliveries are retried; SMTP credentials are read from environment variables and never stored in the outbox. Messages cover cycle launch (participant, with manager copied), employee submission (assigned manager, including return-for-revision guidance), manager return for revision (employee, including the manager's reason and deadline), manager submission for HR approval (active Super Admins), manager release (employee), and bulk-import onboarding (employee, with a one-time setup link). Account passwords are never emailed. Setup links expire after 24 hours by default and work once; the lifetime is configurable with `MI_SETUP_LINK_MINUTES`.
+The API queues lifecycle notifications in the same database transaction as the appraisal action, then sends them through the configured company SMTP relay. Failed deliveries are retried; SMTP credentials are read from environment variables and never stored in the outbox. Messages cover cycle launch (participant, with manager copied), employee submission (assigned manager, including return-for-revision guidance), manager return for revision (employee, including the manager's reason and deadline), manager submission for HR approval (active Super Admins), manager release (employee), bulk-import onboarding (employee, with a one-time setup link), and setup-link creation from User directory. Account passwords are never emailed. Setup links expire after seven days by default and work once; the lifetime is configurable with `MI_SETUP_LINK_MINUTES` up to 30 days.
 
-Mail is disabled by default. Configure these values in the deployment `.env` and recreate the app container:
+Mail is disabled by default. For Microsoft 365 client SMTP submission, configure these values in the deployment `.env` and recreate the app container. Enter the mailbox password only in that private server file, never in chat or Git:
 
 ```dotenv
 MI_MAIL_ENABLED=true
 MI_MAIL_TEST_MODE=true
 MI_MAIL_TEST_RECIPIENT=controlled-test-mailbox@company.example
-MI_MAIL_FROM_ADDRESS=mycareer@company.example
+MI_MAIL_FROM_ADDRESS=hr-mailbox@your-company.com
 MI_MAIL_FROM_NAME=MyCareer
-MI_SMTP_HOST=smtp-relay.company.example
+MI_SMTP_HOST=smtp.office365.com
 MI_SMTP_PORT=587
-MI_SMTP_USERNAME=
-MI_SMTP_PASSWORD=
+MI_SMTP_USERNAME=hr-mailbox@your-company.com
+MI_SMTP_PASSWORD=enter-mailbox-password-here
 MI_SMTP_STARTTLS=true
 MI_PUBLIC_BASE_URL=https://mycareer.company.example
-MI_SETUP_LINK_MINUTES=1440
+MI_SETUP_LINK_MINUTES=10080
 ```
 
-In test mode, every message is redirected to the test mailbox; real `To` and `Cc` recipients are included in the body for verification and are never sent the message. Onboarding test emails omit working setup links. Verify the event types and links. Only then set `MI_MAIL_TEST_MODE=false` to enable live delivery. Use an authorized sender and relay credentials supplied through the server's secret management process. Do not put secrets in chat, Git, or logs. Delivery uses an at-least-once queue, so a relay disconnect immediately after accepting a message can result in a duplicate retry.
+In test mode, every message is redirected to the test mailbox; real `To` and `Cc` recipients are included in the body for verification and are never sent the message. Onboarding and user-directory setup-link test emails omit working setup links. Verify event types and links. Only then set `MI_MAIL_TEST_MODE=false` to enable live delivery. Use an authorized sender and relay credentials supplied through the server's secret management process. Do not put secrets in chat, Git, or logs. Delivery uses an at-least-once queue, so a relay disconnect immediately after accepting a message can result in a duplicate retry. When changing an existing deployment, update `MI_SETUP_LINK_MINUTES` in its private `.env` to `10080` and recreate the app container; changing the example file alone does not alter a server's existing `.env`.
+
+For Microsoft 365, use a licensed organizational mailbox to authenticate and send from that same address, with port 587 and STARTTLS. Ask the Microsoft 365 administrator to enable Authenticated SMTP for that mailbox and confirm outbound TCP 587 is allowed. MyCareer's current SMTP implementation uses mailbox username/password authentication; if tenant policy requires OAuth, this build needs an OAuth-capable mail transport before it can connect. Microsoft says Basic SMTP AUTH behavior is unchanged through December 2026, after which it is disabled by default for existing tenants; plan the OAuth transition with IT.
 
 For the local development stack, use fresh URL-safe MySQL passwords and an application secret:
 
@@ -212,4 +221,4 @@ Colors follow verified corporate tokens. Dark surfaces use the official white lo
 
 ## HR operations upgrade (21 October 2026)
 
-Install the updated backend runtime lock, run `python -m alembic upgrade head` from `backend`, regenerate API types and rebuild the frontend, then restart both processes. Expected migration head is `rolepolicy`. The migration preserves previously finalized evaluations as approved. Appraisal attachments are stored in a private persistent directory; back up that directory along with the database. See [HR operations](11-hr-operations.md) for combined roles, monitoring, immutable form publication, final report downloads, and Excel imports with private setup links. No existing user needs to be recreated.
+Install the updated backend runtime lock, run `python -m alembic upgrade head` from `backend`, regenerate API types and rebuild the frontend, then restart both processes. Expected migration head is `hrmsmaster`. The migration preserves previously finalized evaluations as approved and adds HRMS location/date-joined fields to user profiles. Appraisal attachments are stored in a private persistent directory; back up that directory along with the database. See [HR operations](11-hr-operations.md) for combined roles, monitoring, immutable form publication, final report downloads, and Excel imports with private setup links. No existing user needs to be recreated.

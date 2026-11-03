@@ -10,6 +10,7 @@ from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import Credential, PasswordToken
 from app.modules.auth.service import revoke_all
+from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.users import service
 from app.modules.users.models import RoleCode, User, UserRole
 from app.modules.users.schemas import (
@@ -22,13 +23,18 @@ from app.modules.users.schemas import (
     DirectoryUser,
     EditUser,
     ResetPassword,
+    SetupLinkResponse,
     VersionInput,
 )
 
 router = APIRouter(prefix="/admin", tags=["Account administration"])
 
 
-@router.post("/users/{user_id}/setup-link", dependencies=[Depends(require_role(RoleCode.SUPER_ADMIN))])
+@router.post(
+    "/users/{user_id}/setup-link",
+    response_model=SetupLinkResponse,
+    dependencies=[Depends(require_role(RoleCode.SUPER_ADMIN))],
+)
 def setup_link(
     user_id: str,
     data: VersionInput,
@@ -52,7 +58,36 @@ def setup_link(
         )
         user.version += 1
         result = setup_token(db, user, request.app.state.settings)
-        db.add(AuditEvent(actor_id=actor.user.id, action="admin.setup_link_created", resource_id=user.id))
+        settings = request.app.state.settings
+        if settings.mail_enabled:
+            if settings.mail_test_mode:
+                email_status = "test_only"
+                body = (
+                    f"Hello {user.full_name},\n\nA MyCareer account setup email was requested for "
+                    f"{user.email}. Mail is in test mode, so this message does not contain a working setup "
+                    "link. The administrator will securely share the link after testing is complete.\n\n"
+                    "If you did not expect a MyCareer account, contact your administrator."
+                )
+            else:
+                email_status = "queued"
+                body = (
+                    f"Hello {user.full_name},\n\nUse this one-time link to set your MyCareer password:\n"
+                    f"{result['setup_url']}\n\nThis link expires at "
+                    f"{result['expires_at']:%d %b %Y, %H:%M} UTC and can only be used once. "
+                    "If you did not expect a MyCareer account, contact your administrator."
+                )
+            enqueue_email(db, settings, "Set up your MyCareer account", body, [user.email])
+        else:
+            email_status = "disabled"
+        result["email_status"] = email_status
+        db.add(
+            AuditEvent(
+                actor_id=actor.user.id,
+                action="admin.setup_link_created",
+                resource_id=user.id,
+                details={"email_status": email_status},
+            )
+        )
     return result
 
 
@@ -206,9 +241,24 @@ def change_role(
 ):
     with service.admin_write(db, actor):
         user = service.versioned_user(db, user_id, data.expected_version)
-        if user.id == actor.user.id:
-            raise AppError(403, "SELF_ROLE_CHANGE", "You cannot change your own role.")
         roles = service.assigned_roles(data.role, data.super_admin)
+        if user.id == actor.user.id:
+            current_roles = set(user.roles)
+            requested_roles = set(roles)
+            may_add_manager = (
+                RoleCode.SUPER_ADMIN in current_roles
+                and requested_roles == {RoleCode.SUPER_ADMIN.value, RoleCode.MANAGER.value}
+                and current_roles in (
+                    {RoleCode.SUPER_ADMIN.value},
+                    {RoleCode.SUPER_ADMIN.value, RoleCode.MANAGER.value},
+                )
+            )
+            if not may_add_manager:
+                raise AppError(
+                    403,
+                    "SELF_ROLE_CHANGE",
+                    "You may add Manager access to your Super Admin account, but cannot remove your Super Admin access.",
+                )
         service.protect_admin(db, user, RoleCode.SUPER_ADMIN not in roles)
         if RoleCode.MANAGER in user.roles and RoleCode.MANAGER not in roles:
             service.protect_manager(db, user)

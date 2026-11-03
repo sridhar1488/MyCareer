@@ -89,9 +89,9 @@ def downgrade() -> None:
     for table in ["manager_submissions", "hr_calibration_events"]:
         for operation in ["update", "delete"]:
             op.execute(f"DROP TRIGGER IF EXISTS {table}_no_{operation}")
-    op.drop_index("ix_appraisal_attachments_appraisal_id", table_name="appraisal_attachments")
+    # Drop whole tables directly: on MySQL these child-column indexes are required
+    # by their foreign keys and cannot be removed independently.
     op.drop_table("appraisal_attachments")
-    op.drop_index("ix_hr_calibration_events_appraisal_id", table_name="hr_calibration_events")
     op.drop_table("hr_calibration_events")
     op.drop_table("hr_calibration_drafts")
     op.drop_table("manager_submissions")

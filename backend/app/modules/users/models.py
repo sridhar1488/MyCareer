@@ -1,8 +1,8 @@
 import enum
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, ForeignKey, String
+from sqlalchemy import Boolean, Date, ForeignKey, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utcnow
@@ -49,6 +49,8 @@ class User(Base):
     version: Mapped[int] = mapped_column(default=1, server_default="1")
     designation: Mapped[str] = mapped_column(String(100), default="")
     country: Mapped[str] = mapped_column(String(80), default="")
+    location: Mapped[str] = mapped_column(String(120), default="", server_default="")
+    date_joined: Mapped[date | None] = mapped_column(Date, nullable=True)
     active: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     credential_version: Mapped[int] = mapped_column(default=1)
     created_at: Mapped[datetime] = mapped_column(default=utcnow)

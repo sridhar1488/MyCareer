@@ -8,7 +8,7 @@ import { ManagerPicker } from './ManagerPicker';
 type DirectoryUser = components['schemas']['DirectoryUser'];
 type Role = components['schemas']['RoleCode'];
 export function UserEditor({ user, onClose, onSaved }: { user?: DirectoryUser; onClose: () => void; onSaved: () => void }) {
-  const [fields, setFields] = useState({ full_name: user?.full_name ?? '', employee_id: user?.employee_id ?? '', email: user?.email ?? '', department: user?.department ?? '', designation: user?.designation ?? '', country: user?.country ?? '' });
+  const [fields, setFields] = useState({ full_name: user?.full_name ?? '', employee_id: user?.employee_id ?? '', email: user?.email ?? '', department: user?.department ?? '', designation: user?.designation ?? '', country: user?.country ?? '', location: user?.location ?? '', date_joined: user?.date_joined ?? '' });
   const [role, setRole] = useState<Role>('EMPLOYEE');
   const [superAdmin,setSuperAdmin] = useState(false);
   const [manager, setManager] = useState(''); const [managerName, setManagerName] = useState('');
@@ -16,14 +16,15 @@ export function UserEditor({ user, onClose, onSaved }: { user?: DirectoryUser; o
   async function submit(event: FormEvent) {
     event.preventDefault(); setBusy(true); setError('');
     try {
-      if (user) await api(`/admin/users/${user.id}`, 'PATCH', { ...fields, expected_version: user.version });
-      else await api('/admin/users', 'POST', { ...fields, role, super_admin:superAdmin, manager_id: manager || null, temporary_password: password });
+      const profile = { ...fields, date_joined: fields.date_joined || null };
+      if (user) await api(`/admin/users/${user.id}`, 'PATCH', { ...profile, expected_version: user.version });
+      else await api('/admin/users', 'POST', { ...profile, role, super_admin:superAdmin, manager_id: manager || null, temporary_password: password });
       setPassword(''); onSaved();
     } catch (error) { setError((error as Error).message); } finally { setBusy(false); }
   }
   return <section className="panel editor" aria-labelledby="editor-heading"><div className="section-heading"><h2 id="editor-heading">{user ? 'Edit user profile' : 'Create user account'}</h2><button className="button small" onClick={onClose} disabled={busy}>Cancel</button></div>
     {error && <Feedback message={error} />}<form onSubmit={submit} aria-busy={busy}><div className="form-grid">
-      {([['full_name', 'Full name', 150], ['employee_id', 'Employee ID', 40], ['email', 'Work email', 254], ['department', 'Department', 100], ['designation', 'Designation', 100], ['country', 'Country', 80]] as const).map(([key, label, max]) => <div key={key}><label htmlFor={`user-${key}`}>{label}</label><input id={`user-${key}`} required maxLength={max} type={key === 'email' ? 'email' : 'text'} value={fields[key]} onChange={e => setFields({ ...fields, [key]: e.target.value })} /></div>)}
+      {([['full_name', 'Full name', 150, 'text'], ['employee_id', 'Employee ID', 40, 'text'], ['email', 'Work email', 254, 'email'], ['department', 'Department', 100, 'text'], ['designation', 'Job title', 100, 'text'], ['location', 'Location', 120, 'text'], ['country', 'Country', 80, 'text'], ['date_joined', 'Date joined', 10, 'date']] as const).map(([key, label, max, type]) => <div key={key}><label htmlFor={`user-${key}`}>{label}</label><input id={`user-${key}`} required={['full_name','employee_id','email','department','designation'].includes(key)} maxLength={type === 'date' ? undefined : max} type={type} value={fields[key]} onChange={e => setFields({ ...fields, [key]: e.target.value })} /></div>)}
     </div>{!user && <><label htmlFor="role">Role</label><select id="role" value={role} onChange={e => { const next=e.target.value as Role; setRole(next); if(next!=='MANAGER') setSuperAdmin(false); }}><option value="EMPLOYEE">Employee</option><option value="MANAGER">Manager</option><option value="SUPER_ADMIN">HR / Super Admin</option></select>{role === 'MANAGER' && <><label className="choice"><input type="checkbox" checked={superAdmin} onChange={e => setSuperAdmin(e.target.checked)} />Additional HR / Super Admin access</label><p className="muted">Use this combination when an HR administrator also manages employees.</p></>}{role === 'EMPLOYEE' && <p className="muted">Employee accounts cannot be assigned Super Admin access. HR accounts use the HR / Super Admin role.</p>}
       {role !== 'SUPER_ADMIN' && <ManagerPicker value={manager} label={managerName} onChange={(id, name) => { setManager(id); setManagerName(name); }} />}
       <label htmlFor="temporary-password">Temporary password</label><input id="temporary-password" type="password" required minLength={8} maxLength={15} autoComplete="new-password" value={password} onChange={e => setPassword(e.target.value)} /><p className="muted">Use 8–15 characters. Share privately with the user; a password change is required on first sign-in.</p></>}

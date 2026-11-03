@@ -142,9 +142,18 @@ def test_csrf_self_role_last_admin_and_reporting_cycles(client, signin, user_fac
         ).status_code
         == 403
     )
+    promotion = client.put(
+        f"/api/v1/admin/users/{admin.id}/role",
+        json={"expected_version": 1, "role": "MANAGER", "super_admin": True},
+        headers=h,
+    )
+    assert promotion.status_code == 200, promotion.text
+    assert set(promotion.json()["roles"]) == {"MANAGER", "SUPER_ADMIN"}
+    assert client.get("/api/v1/auth/me").status_code == 401
+    h = headers(signin, admin)
     assert (
         client.post(
-            f"/api/v1/admin/users/{admin.id}/deactivate", json={"expected_version": 1}, headers=h
+            f"/api/v1/admin/users/{admin.id}/deactivate", json={"expected_version": 2}, headers=h
         ).json()["error"]["code"]
         == "LAST_ADMIN"
     )

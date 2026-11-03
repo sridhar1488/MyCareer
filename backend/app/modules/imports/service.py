@@ -1,4 +1,5 @@
-from datetime import timedelta
+from collections import defaultdict
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from xml.etree.ElementTree import ParseError
 from zipfile import BadZipFile, ZipFile
@@ -7,7 +8,6 @@ from defusedxml.common import DefusedXmlException
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils.exceptions import InvalidFileException
-from openpyxl.worksheet.datavalidation import DataValidation
 from pydantic import ValidationError
 from sqlalchemy import select
 
@@ -19,15 +19,24 @@ from app.modules.users.models import RoleCode, User
 from app.modules.users.schemas import ProfileInput
 
 COLUMNS = [
+    "Employee Number",
+    "Full Name",
+    "Work Email",
+    "Location",
+    "Department",
+    "Job Title",
+    "Reporting To",
+    "Date Joined",
+]
+FIELDS = [
     "employee_id",
     "full_name",
     "email",
+    "location",
     "department",
     "designation",
-    "country",
-    "role",
-    "super_admin",
-    "manager_employee_id",
+    "reporting_to",
+    "date_joined",
 ]
 MAX_ROWS = 200
 MAX_BYTES = 5 * 1024 * 1024
@@ -39,33 +48,28 @@ def template():
     sheet.title = "Users"
     sheet.append(COLUMNS)
     sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = "A1:I201"
-    for col in range(1, 10):
-        sheet.column_dimensions[chr(64 + col)].width = 30 if col in [2, 3] else 24
+    sheet.auto_filter.ref = "A1:H201"
+    for col in range(1, len(COLUMNS) + 1):
+        sheet.column_dimensions[chr(64 + col)].width = 30 if col in [2, 3, 7] else 22
         cell = sheet.cell(1, col)
         cell.font = Font(color="FFFFFF", bold=True)
         cell.fill = PatternFill("solid", fgColor="702C91")
         cell.alignment = Alignment(wrap_text=True)
         for row in range(2, 202):
-            sheet.cell(row, col).number_format = "@"
+            sheet.cell(row, col).number_format = "dd-mmm-yyyy" if col == 8 else "@"
     sheet.row_dimensions[1].height = 30
-    for column, values in [("G", "EMPLOYEE,MANAGER,SUPER_ADMIN"), ("H", "TRUE,FALSE")]:
-        validation = DataValidation(type="list", formula1=f'"{values}"', allow_blank=True)
-        sheet.add_data_validation(validation)
-        validation.add(f"{column}2:{column}201")
     notes = workbook.create_sheet("Instructions")
     for line in [
-        "MyCareer - new user import",
+        "MyCareer - HRMS user import",
         "Fill Users with up to 200 new accounts. Do not change the header row.",
-        "employee_id and manager_employee_id are text: retain leading zeros.",
-        "Role: EMPLOYEE, MANAGER, or SUPER_ADMIN. Blank means EMPLOYEE.",
-        "super_admin: TRUE adds HR / Super Admin access to a MANAGER account. Employee accounts cannot have this access.",
-        "Use SUPER_ADMIN for an HR account that does not also need the Manager role.",
-        "manager_employee_id may identify an existing active Manager or another Manager in this file.",
-        "Leave manager_employee_id blank for top-level managers or accounts awaiting assignment.",
-        "Duplicates and reporting cycles are rejected. Existing accounts are never updated.",
+        "Employee Number is stored as Employee ID. Format it as text to retain leading zeros.",
+        "Reporting To may contain a manager's Employee Number or unique Full Name. Leave blank when there is no manager.",
+        "A person referenced in Reporting To is assigned the Manager role; all other imported accounts are Employees.",
+        "HR / Super Admin accounts are created separately in MyCareer, not imported from this sheet.",
+        "Location is stored separately from Country. Date Joined may be an Excel date or YYYY-MM-DD; leave blank if unknown.",
+        "Duplicates, ambiguous manager names and reporting cycles are rejected. Existing accounts are never updated.",
         "No passwords belong in this workbook. Confirmed imports generate private one-use setup links.",
-        "Setup links use the configured reset expiry (30 minutes by default); hand them off privately.",
+        "Setup links use the configured expiry (7 days by default); hand them off privately.",
         "Upload to preview, fix reported rows, then confirm the complete batch.",
     ]:
         notes.append([line])
@@ -108,7 +112,7 @@ def read_file(data):
                     continue
                 if any(cell.data_type == "f" for cell in cells):
                     raise ValueError("Formulas are not allowed")
-                values = {key: cell.value for key, cell in zip(COLUMNS, cells, strict=True)}
+                values = {key: cell.value for key, cell in zip(FIELDS, cells, strict=True)}
                 rows.append({"row": number, **values})
             if not rows:
                 raise ValueError("The Users sheet has no accounts")
@@ -129,7 +133,7 @@ def read_file(data):
         raise AppError(
             422,
             "INVALID_IMPORT",
-            "Use the supplied .xlsx template, with 1-200 rows, exact headers and no formulas, macros or external links.",
+            "Use the supplied HRMS .xlsx template, with 1-200 rows, exact headers and no formulas, macros or external links.",
         ) from None
 
 
@@ -145,6 +149,21 @@ def text(value):
     return value.strip()
 
 
+def joined_date(value):
+    if value is None or value == "":
+        return None
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    if isinstance(value, str):
+        try:
+            return date.fromisoformat(value.strip())
+        except ValueError:
+            raise ValueError("Date Joined must be an Excel date or YYYY-MM-DD") from None
+    raise ValueError("Date Joined must be an Excel date or YYYY-MM-DD")
+
+
 def validate_rows(db, rows):
     normalized = []
     errors = []
@@ -152,31 +171,25 @@ def validate_rows(db, rows):
     seen_emails = set()
     existing = db.scalars(select(User)).all()
     by_id = {u.employee_id.casefold(): u for u in existing}
+    existing_by_name = defaultdict(list)
+    for user in existing:
+        if user.active:
+            existing_by_name[user.full_name.casefold()].append(user)
     emails = {u.email.casefold() for u in existing}
     for row in rows:
         number = row["row"]
         try:
             profile = ProfileInput(
-                **{
-                    k: text(row.get(k))
-                    for k in ["employee_id", "full_name", "email", "department", "designation", "country"]
-                }
+                employee_id=text(row.get("employee_id")),
+                full_name=text(row.get("full_name")),
+                email=text(row.get("email")),
+                department=text(row.get("department")),
+                designation=text(row.get("designation")),
+                country="",
+                location=text(row.get("location")),
+                date_joined=joined_date(row.get("date_joined")),
             )
-            role = text(row.get("role")) or "EMPLOYEE"
-            if role not in ["EMPLOYEE", "MANAGER", "SUPER_ADMIN"]:
-                raise ValueError("Role must be EMPLOYEE, MANAGER, or SUPER_ADMIN")
-            flag = row.get("super_admin")
-            if isinstance(flag, str):
-                flag = flag.strip().upper()
-            if not (
-                flag is None or type(flag) is bool or isinstance(flag, str) and flag in ["", "TRUE", "FALSE"]
-            ):
-                raise ValueError("super_admin must be TRUE or FALSE")
-            admin = flag is True or flag == "TRUE"
-            if role == "EMPLOYEE" and admin:
-                raise ValueError("Employee accounts cannot be assigned Super Admin access")
-            admin = admin or role == "SUPER_ADMIN"
-            manager = text(row.get("manager_employee_id"))
+            manager_reference = text(row.get("reporting_to") or row.get("manager_employee_id"))
             identifier = profile.employee_id.casefold()
             email = profile.email.casefold()
             if identifier in seen_ids or identifier in by_id:
@@ -185,13 +198,13 @@ def validate_rows(db, rows):
                 raise ValueError("Email already exists or is repeated in this file")
             seen_ids.add(identifier)
             seen_emails.add(email)
+            profile_data = profile.model_dump()
+            profile_data["date_joined"] = profile.date_joined.isoformat() if profile.date_joined else None
             normalized.append(
                 {
                     "row": number,
-                    **profile.model_dump(),
-                    "role": role,
-                    "super_admin": admin,
-                    "manager_employee_id": manager,
+                    **profile_data,
+                    "reporting_to": manager_reference,
                 }
             )
         except ValidationError as exc:
@@ -204,26 +217,71 @@ def validate_rows(db, rows):
         except ValueError as exc:
             errors.append({"row": number, "message": str(exc)})
     incoming = {r["employee_id"].casefold(): r for r in normalized}
+    incoming_by_name = defaultdict(list)
+    for row in normalized:
+        incoming_by_name[row["full_name"].casefold()].append(row)
+
+    def resolve_manager(reference):
+        key = reference.casefold()
+        if key in incoming:
+            return "incoming", incoming[key]
+        if key in by_id:
+            return "existing", by_id[key]
+        matches = [("incoming", item) for item in incoming_by_name.get(key, [])]
+        matches.extend(("existing", item) for item in existing_by_name.get(key, []))
+        if len(matches) == 1:
+            return matches[0]
+        if len(matches) > 1:
+            raise ValueError("Reporting To matches more than one person; use the manager's Employee Number")
+        raise ValueError("Reporting To must match an Employee Number or unique active Manager name")
+
+    resolved = {}
+    inferred_manager_ids = set()
+    for row in normalized:
+        reference = row["reporting_to"]
+        if not reference:
+            continue
+        try:
+            resolved[row["row"]] = resolve_manager(reference)
+        except ValueError as exc:
+            errors.append({"row": row["row"], "message": str(exc)})
+            continue
+        kind, target = resolved[row["row"]]
+        if kind == "incoming":
+            inferred_manager_ids.add(target["employee_id"].casefold())
+
+    for row in normalized:
+        row["role"] = "MANAGER" if row["employee_id"].casefold() in inferred_manager_ids else "EMPLOYEE"
+
+    for row in normalized:
+        row["manager_employee_id"] = ""
+        if not row["reporting_to"] or row["row"] not in resolved:
+            continue
+        kind, target = resolved[row["row"]]
+        if kind == "incoming":
+            row["manager_employee_id"] = target["employee_id"]
+            if target["role"] != "MANAGER":
+                errors.append(
+                    {"row": row["row"], "message": "Reporting To must identify a Manager in this file"}
+                )
+        else:
+            row["manager_employee_id"] = target.employee_id
+            if not target.active or RoleCode.MANAGER not in target.roles:
+                errors.append(
+                    {"row": row["row"], "message": "Reporting To must identify an active existing Manager"}
+                )
+
+    def manager_employee_id(employee_id):
+        key = employee_id.casefold()
+        imported = incoming.get(key)
+        if imported:
+            return imported["manager_employee_id"].casefold()
+        old_user = by_id.get(key)
+        parent = db.get(User, old_user.manager_id) if old_user and old_user.manager_id else None
+        return parent.employee_id.casefold() if parent else ""
+
     for row in normalized:
         manager = row["manager_employee_id"].casefold()
-        if not manager:
-            continue
-        candidate = incoming.get(manager)
-        old = by_id.get(manager)
-        if not (
-            candidate
-            and candidate["role"] == "MANAGER"
-            or old
-            and old.active
-            and RoleCode.MANAGER in old.roles
-        ):
-            errors.append(
-                {
-                    "row": row["row"],
-                    "message": "Manager ID must identify an active existing Manager or a Manager in this file",
-                }
-            )
-            continue
         visited = {row["employee_id"].casefold()}
         while manager:
             if manager in visited:
@@ -232,12 +290,7 @@ def validate_rows(db, rows):
                 )
                 break
             visited.add(manager)
-            if manager in incoming:
-                manager = incoming[manager]["manager_employee_id"].casefold()
-            else:
-                old = by_id.get(manager)
-                next_user = db.get(User, old.manager_id) if old and old.manager_id else None
-                manager = next_user.employee_id.casefold() if next_user else ""
+            manager = manager_employee_id(manager)
     return normalized, errors
 
 

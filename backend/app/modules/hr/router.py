@@ -9,6 +9,7 @@ from app.db.base import utcnow
 from app.modules.appraisals.models import Appraisal, Cycle
 from app.modules.hr.schemas import (
     AnalyticsResponse,
+    AnalyticsSummary,
     DepartmentAnalytics,
     FilterOption,
     ManagerStatus,
@@ -17,7 +18,6 @@ from app.modules.hr.schemas import (
     MonitorRow,
     ScorePoint,
     TopPerformer,
-    AnalyticsSummary,
 )
 from app.modules.reviews import scoring
 from app.modules.reviews.models import Acknowledgement, FinalEvaluation, Release
@@ -69,9 +69,7 @@ def analytics(
     query = (
         select(Appraisal, FinalEvaluation)
         .outerjoin(FinalEvaluation, FinalEvaluation.appraisal_id == Appraisal.id)
-        .where(
-            or_(Appraisal.employee_id != actor.user.id, Appraisal.state == "RELEASED")
-        )
+        .where(or_(Appraisal.employee_id != actor.user.id, Appraisal.state == "RELEASED"))
     )
     if cycle_id:
         query = query.where(Appraisal.cycle_id == cycle_id)
@@ -84,24 +82,16 @@ def analytics(
     approved_count = 0
     for appraisal, final in db.execute(query):
         appraisal_count += 1
-        identity = (
-            final.employee_snapshot.get("identity", {})
-            if final
-            else appraisal.identity_snapshot
-        )
+        identity = final.employee_snapshot.get("identity", {}) if final else appraisal.identity_snapshot
         department = identity.get("department") or "Unassigned"
-        dept = department_rows.setdefault(
-            department, {"appraisals": 0, "approved": 0, "scores": []}
-        )
+        dept = department_rows.setdefault(department, {"appraisals": 0, "approved": 0, "scores": []})
         dept["appraisals"] += 1
         if not final or appraisal.state not in {"HR_APPROVED", "RELEASED"}:
             continue
 
         approved_count += 1
         raw_overall = final.score.get("overall", {})
-        score_value = Fraction(
-            int(raw_overall["numerator"]), int(raw_overall["denominator"])
-        )
+        score_value = Fraction(int(raw_overall["numerator"]), int(raw_overall["denominator"]))
         overall_scores.append(score_value)
         dept["approved"] += 1
         dept["scores"].append(score_value)
@@ -138,11 +128,7 @@ def analytics(
             approval_percent=scoring.exact(
                 Fraction(values["approved"] * 100, values["appraisals"]), 1
             ).display,
-            average_score=(
-                scoring.exact(average(values["scores"]), 1).display
-                if values["scores"]
-                else None
-            ),
+            average_score=(scoring.exact(average(values["scores"]), 1).display if values["scores"] else None),
         )
         for name, values in sorted(department_rows.items())
     ]
@@ -167,14 +153,14 @@ def analytics(
                 if appraisal_count
                 else "0.0"
             ),
-            approved_average=(
-                scoring.exact(average(overall_scores), 1).display if overall_scores else None
-            ),
+            approved_average=(scoring.exact(average(overall_scores), 1).display if overall_scores else None),
         ),
         departments=departments,
         top_performers=performers[:5],
         score_points=score_points,
     )
+
+
 @router.get("/monitor", response_model=MonitorResponse)
 def monitor(
     view: str = Query("individuals", pattern="^(individuals|managers)$"),

@@ -199,6 +199,7 @@ def download_attachment(
     appraisal_id: str,
     attachment_id: str,
     request: Request,
+    inline: bool = Query(False),
     actor: Identity = Depends(active_identity),
     db: Session = Depends(get_db),
 ):
@@ -223,7 +224,13 @@ def download_attachment(
         path,
         media_type=item.media_type,
         filename=item.original_name,
-        headers={"Content-Security-Policy": "default-src 'none'; sandbox"},
+        content_disposition_type="inline" if inline else "attachment",
+        headers={
+            "Content-Security-Policy": "default-src 'none'; sandbox",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "private, no-store",
+            "Referrer-Policy": "no-referrer",
+        },
     )
 
 

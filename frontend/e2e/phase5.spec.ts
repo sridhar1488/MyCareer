@@ -30,7 +30,7 @@ test('assigned manager saves review, returns with reason and reviews a fresh res
   await page.getByRole('button',{name:/Open review/}).click();
   await page.getByRole('button',{name:'Begin review',exact:true}).click();
   await expect(page.getByText('Review started.',{exact:true})).toBeVisible();
-  await page.getByLabel('Manager rating',{exact:true}).first().selectOption('4');
+  await page.getByLabel('Rating',{exact:true}).first().selectOption('4');
   await page.getByLabel('Supporting evaluation comment',{exact:true}).first().fill('Good progress; clarify the impact metric.');
   await page.getByRole('button',{name:'Save manager draft',exact:true}).click();
   await expect(page.getByText('Manager review draft saved.',{exact:true})).toBeVisible();
@@ -46,12 +46,12 @@ test('assigned manager saves review, returns with reason and reviews a fresh res
   expect((await page.request.post(`/api/v1/appraisals/${a.id}/submit`,{headers:{...ownHeaders,'X-CSRF-Token':token},data:{expected_version:saved.version}})).ok()).toBe(true);
   await apiLogin('manager.e2e@example.org');await page.reload();
   await page.getByRole('button',{name:'Team appraisals',exact:true}).click();await page.getByLabel('Find an employee').fill(employeeId);await page.getByRole('button',{name:/Open review/}).click();
-  await expect(page.getByLabel('Manager rating',{exact:true}).first()).toHaveValue('');
+  await expect(page.getByLabel('Rating',{exact:true}).first()).toHaveValue('');
   await expect(page.getByText('2. Additional goal',{exact:true})).toBeVisible();
   await page.getByRole('button',{name:'View manager review history',exact:true}).click();
   await page.getByText('Preserved manager draft',{exact:true}).click();
   await expect(page.getByText('Goal 1: 4 · Good progress; clarify the impact metric.',{exact:true})).toBeVisible();
-  const ratings = page.getByLabel('Manager rating',{exact:true});
+  const ratings = page.getByLabel('Rating',{exact:true});
   for(let i=0;i<await ratings.count();i++) await ratings.nth(i).selectOption('4');
   const comments = page.getByLabel('Supporting evaluation comment',{exact:true});
   for(let i=0;i<await comments.count();i++) await comments.nth(i).fill('Demonstrated effective results with supporting examples.');
@@ -83,7 +83,7 @@ test('assigned manager saves review, returns with reason and reviews a fresh res
   await expect(page.getByText('Evaluation released to the employee.',{exact:true})).toBeVisible();
   await apiLogin(email,password+'-own');await page.reload();
   await page.getByRole('button',{name:'View appraisal',exact:true}).click();
-  await expect(page.getByRole('heading',{name:"Your manager's final evaluation",exact:true})).toBeVisible();
+  await expect(page.getByRole('heading',{name:'Your HR approved evaluation',exact:true})).toBeVisible();
   await expect(page.getByText('Overall score 4.0',{exact:false})).toBeVisible();
   await page.getByRole('button',{name:'I acknowledge receipt',exact:true}).click();
   await expect(page.getByRole('status').filter({hasText:'Receipt acknowledged on'})).toBeVisible();

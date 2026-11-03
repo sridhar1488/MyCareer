@@ -34,8 +34,8 @@ test('temporary credential must be replaced before continuing', async ({ page })
   await page.getByRole('button', { name: 'Sign in', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Choose your own password' })).toBeVisible();
   await page.getByLabel('Current password').fill(password);
-  await page.getByLabel('New password', { exact: true }).fill(`${password}-changed`);
-  await page.getByLabel('Confirm new password').fill(`${password}-changed`);
+  await page.getByLabel('New password', { exact: true }).fill(`${password}-change`);
+  await page.getByLabel('Confirm new password').fill(`${password}-change`);
   await page.getByRole('button', { name: 'Save new password' }).click();
   await expect(page.getByRole('status')).toHaveText('Password changed. Other sessions have been signed out.');
   await expect(page.getByRole('heading', { name: 'Your profile' })).toBeVisible();
