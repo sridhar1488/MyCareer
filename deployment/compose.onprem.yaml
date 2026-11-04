@@ -23,8 +23,9 @@ services:
       MI_ENVIRONMENT: production
       MI_DATABASE_URL: mysql+pymysql://${MI_DATABASE_USER:?Set MI_DATABASE_USER}:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/${MI_DATABASE_NAME:?Set MI_DATABASE_NAME}?charset=utf8mb4
       MI_SECRET_KEY: ${MI_SECRET_KEY:?Set MI_SECRET_KEY}
-      MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the public HTTPS origin}'
-      MI_COOKIE_SECURE: "true"
+      MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the app origin}'
+      MI_COOKIE_SECURE: ${MI_COOKIE_SECURE:-true}
+      MI_ALLOW_INSECURE_HTTP: ${MI_ALLOW_INSECURE_HTTP:-false}
     command: ["alembic", "upgrade", "head"]
     depends_on:
       db:
@@ -38,8 +39,9 @@ services:
       MI_ENVIRONMENT: production
       MI_DATABASE_URL: mysql+pymysql://${MI_DATABASE_USER:?Set MI_DATABASE_USER}:${MYSQL_PASSWORD:?Set MYSQL_PASSWORD}@db:3306/${MI_DATABASE_NAME:?Set MI_DATABASE_NAME}?charset=utf8mb4
       MI_SECRET_KEY: ${MI_SECRET_KEY:?Set MI_SECRET_KEY}
-      MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the public HTTPS origin}'
-      MI_COOKIE_SECURE: "true"
+      MI_ALLOWED_ORIGINS: '${MI_ALLOWED_ORIGINS:?Set MI_ALLOWED_ORIGINS to a JSON array containing the app origin}'
+      MI_COOKIE_SECURE: ${MI_COOKIE_SECURE:-true}
+      MI_ALLOW_INSECURE_HTTP: ${MI_ALLOW_INSECURE_HTTP:-false}
       MI_ATTACHMENT_DIRECTORY: /srv/storage/appraisal-attachments
       MI_MAIL_ENABLED: ${MI_MAIL_ENABLED:-false}
       MI_MAIL_TEST_MODE: ${MI_MAIL_TEST_MODE:-true}
@@ -54,7 +56,7 @@ services:
       MI_PUBLIC_BASE_URL: ${MI_PUBLIC_BASE_URL:-}
       MI_SETUP_LINK_MINUTES: ${MI_SETUP_LINK_MINUTES:-10080}
     ports:
-      - "8080:8000"
+      - "${MI_HOST_PORT:-8080}:8000"
     volumes:
       - attachments:/srv/storage/appraisal-attachments
     depends_on:

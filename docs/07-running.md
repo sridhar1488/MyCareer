@@ -155,7 +155,7 @@ openssl rand -hex 32
 openssl rand -hex 32
 ```
 
-   Put the first two values in `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`; use the third for `MI_SECRET_KEY`. Set the exact HTTPS origin as a JSON array, for example `MI_ALLOWED_ORIGINS=["https://mycareer.example.local"]`. Do not reuse development secrets, put secrets in shell history, or commit `.env`.
+   Put the first two values in `MYSQL_PASSWORD` and `MYSQL_ROOT_PASSWORD`; use the third for `MI_SECRET_KEY`. The on-prem example is configured for VPN-only HTTP: replace `mycareer.internal` in `MI_ALLOWED_ORIGINS` and `MI_PUBLIC_BASE_URL` with the server's VPN DNS name or IP. It sets `MI_ALLOW_INSECURE_HTTP=true`, `MI_COOKIE_SECURE=false`, and `MI_HOST_PORT=80`. This sends sign-in and session data without TLS; restrict port 80 to the VPN network at the host and network firewalls, and do not expose it publicly. For HTTPS instead, use an HTTPS origin, set `MI_ALLOW_INSECURE_HTTP=false`, `MI_COOKIE_SECURE=true`, and choose the internal app port required by the TLS proxy. Do not reuse development secrets, put secrets in shell history, or commit `.env`.
 6. Check the Compose configuration and initialize the database schema, then start the app:
 
 ```sh
@@ -166,11 +166,11 @@ sudo docker compose --env-file .env -f compose.onprem.yaml up -d app
 sudo docker compose --env-file .env -f compose.onprem.yaml ps
 ```
 
-7. Configure the TLS reverse proxy and certificate. It must forward the original `Host` header to the server's app listener on port 8080. The app port is bound on all interfaces; restrict its cleartext access to the trusted reverse proxy using host/network firewall rules. Do not publish MySQL. Allow inbound HTTPS at the host/network firewall. Production uses secure cookies and rejects non-HTTPS origins.
-8. Verify readiness through the HTTPS proxy, then create the first application administrator:
+7. Do not publish MySQL. For VPN-only HTTP, allow inbound port 80 only from the VPN network. For HTTPS, configure a TLS reverse proxy and certificate, forward the original `Host` header to the app listener, and expose only the proxy to users.
+8. Verify readiness through the configured app address, then create the first application administrator:
 
 ```sh
-curl --fail --show-error https://mycareer.example.local/api/v1/health/ready
+curl --fail --show-error http://mycareer.internal/api/v1/health/ready
 sudo docker compose --env-file .env -f compose.onprem.yaml exec -it app \
   python -m app.cli bootstrap-admin \
   --email YOUR_WORK_EMAIL --employee-id YOUR_EMPLOYEE_ID --name "YOUR_FULL_NAME"

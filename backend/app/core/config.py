@@ -13,6 +13,7 @@ class Settings(BaseSettings):
     secret_key: SecretStr = Field(min_length=32)
     allowed_origins: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
     cookie_secure: bool = False
+    allow_insecure_http: bool = False
     session_hours: int = Field(default=8, ge=1, le=24)
     session_idle_minutes: int = Field(default=30, ge=1, le=120)
     reset_minutes: int = Field(default=30, ge=5, le=60)
@@ -49,10 +50,18 @@ class Settings(BaseSettings):
         if not db.startswith(("mysql+pymysql://", "sqlite://")):
             raise ValueError("Use MySQL/PyMySQL; SQLite is limited to local development and tests")
         if self.environment == "production":
-            if not db.startswith("mysql+pymysql://") or not self.cookie_secure:
-                raise ValueError("Production requires MySQL and secure cookies")
-            if any(urlsplit(o).scheme != "https" for o in self.allowed_origins):
-                raise ValueError("Production origins require HTTPS")
+            if not db.startswith("mysql+pymysql://"):
+                raise ValueError("Production requires MySQL")
+            has_http_origin = any(urlsplit(o).scheme == "http" for o in self.allowed_origins)
+            if has_http_origin:
+                if not self.allow_insecure_http:
+                    raise ValueError("Production HTTP origins require MI_ALLOW_INSECURE_HTTP=true")
+                if self.cookie_secure:
+                    raise ValueError("HTTP origins require MI_COOKIE_SECURE=false")
+            elif not self.cookie_secure:
+                raise ValueError("Production HTTPS origins require secure cookies")
+            if self.allow_insecure_http and not has_http_origin:
+                raise ValueError("MI_ALLOW_INSECURE_HTTP requires at least one HTTP origin")
         if self.mail_enabled:
             if not all([self.smtp_host, self.mail_from_address, self.public_base_url]):
                 raise ValueError("Enabled mail requires SMTP host, sender address, and public app URL")
