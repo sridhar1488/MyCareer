@@ -3,6 +3,9 @@ services:
   db:
     image: mysql:8.4.11@sha256:0f51e63e537a1f176423fa03ef559aabe6fa4372a53160a44bc7e75da7d15364
     restart: unless-stopped
+    # MySQL 8.4 enables binary logging by default; the initial migration creates
+    # reviewed audit triggers using the scoped application database account.
+    command: ["--log-bin-trust-function-creators=ON"]
     environment:
       MYSQL_DATABASE: ${MI_DATABASE_NAME:?Set MI_DATABASE_NAME to the existing database name}
       MYSQL_USER: ${MI_DATABASE_USER:?Set MI_DATABASE_USER to the existing database user}

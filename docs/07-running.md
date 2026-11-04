@@ -166,6 +166,8 @@ sudo docker compose --env-file .env -f compose.onprem.yaml up -d app
 sudo docker compose --env-file .env -f compose.onprem.yaml ps
 ```
 
+The on-prem MySQL service enables `log_bin_trust_function_creators` so the migration's reviewed audit triggers can be created by the scoped application database account; do not grant that account `SUPER`. MySQL DDL may partially persist if a migration fails. On a brand-new installation only, if the first migration stops partway through, reset the empty database volume before retrying; never do this to an installation with data.
+
 7. Do not publish MySQL. For VPN-only HTTP, allow inbound port 80 only from the VPN network. For HTTPS, configure a TLS reverse proxy and certificate, forward the original `Host` header to the app listener, and expose only the proxy to users.
 8. Verify readiness through the configured app address, then create the first application administrator:
 
