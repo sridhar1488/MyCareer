@@ -92,6 +92,7 @@ input::placeholder { color: #817585; }
 .workspace-main { width: 100%; max-width: 1240px; padding: 40px 48px; margin: 0 auto; flex: 1; }
 .workspace-main > .eyebrow { color: var(--brand-primary); margin-bottom: 12px; }
 .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 28px 30px; margin-bottom: 24px; }
+.form-builder-list { display: grid; gap: 24px; }
 .welcome-panel { border-radius: 10px; background: var(--soft); padding: 36px; margin-bottom: 28px; display: flex; justify-content: space-between; overflow: hidden; }
 .welcome-panel .eyebrow { color: var(--brand-primary); font-size: .62rem; }
 .welcome-panel h2 { color: var(--brand-dark); font-size: 1.9rem; margin: 12px 0; }
@@ -197,6 +198,7 @@ legend { font-size: .9rem; font-weight: 650; padding: 0 8px; }
 .competency-list li { margin: 8px 0; break-inside: avoid; }
 .review-text { white-space: pre-wrap; overflow-wrap: anywhere; }
 .review-item { padding: 18px 0; border-bottom: 1px solid var(--border); }
+.submission-review > .action-bar { margin-top: 36px; padding-top: 32px; border-top: 1px solid var(--border); }
 .sticky-actions { position: sticky; bottom: 0; box-shadow: 0 -5px 18px #25064408; z-index: 2; }
 .history-list { font-size: .85rem; padding-left: 20px; }
 .history-list li { padding: 12px 0; }

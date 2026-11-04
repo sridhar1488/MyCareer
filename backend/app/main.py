@@ -96,7 +96,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        inline_attachment = (
+            request.url.path.startswith("/api/v1/appraisals/")
+            and "/attachments/" in request.url.path
+            and request.query_params.get("inline") == "true"
+        )
+        response.headers["X-Frame-Options"] = "SAMEORIGIN" if inline_attachment else "DENY"
         response.headers["Referrer-Policy"] = "no-referrer"
         if "Cache-Control" not in response.headers:
             response.headers["Cache-Control"] = "no-store"
