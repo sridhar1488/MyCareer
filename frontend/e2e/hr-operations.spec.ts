@@ -151,6 +151,13 @@ test('HR publishes a form and uses the calibration grid to download, override an
   expect(Math.abs(excel!.y - pdf!.y)).toBeLessThan(1);
   expect(Math.abs(excel!.height - pdf!.height)).toBeLessThan(1);
   expect(pdf!.x + pdf!.width).toBeLessThanOrEqual(width);
+  const toolbar = await analyticsPanel.locator('.analytics-actions').boundingBox();
+  expect(Math.abs(pdf!.x + pdf!.width - toolbar!.x - toolbar!.width)).toBeLessThan(1);
+  if (width >= 900) {
+   const cycleSelect = await analyticsPanel.getByRole('combobox',{name:'Cycle',exact:true}).boundingBox();
+   expect(Math.abs(cycleSelect!.y - excel!.y)).toBeLessThan(1);
+   expect(Math.abs(cycleSelect!.height - excel!.height)).toBeLessThan(1);
+  }
  }
  await page.setViewportSize({width:1280,height:844});
  for (const [format, label] of [['xlsx', 'Excel'], ['pdf', 'PDF']]) {
