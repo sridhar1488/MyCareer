@@ -6,7 +6,7 @@ from app.api.dependencies import Identity, csrf, get_db, require_role
 from app.modules.appraisals.models import Appraisal, Cycle
 from app.modules.appraisals.schemas import HistoryPage, HistoryRow
 from app.modules.reviews import service
-from app.modules.reviews.models import ReviewEvent
+from app.modules.reviews.models import Acknowledgement, FinalEvaluation, Release, ReviewEvent
 from app.modules.reviews.schemas import (
     ReleaseReview,
     ReturnReview,
@@ -18,6 +18,7 @@ from app.modules.reviews.schemas import (
     TeamPage,
     TeamRow,
 )
+from app.modules.reviews.workflow import appraisal_stage
 from app.modules.users.models import RoleCode, User
 
 router = APIRouter(
@@ -27,6 +28,24 @@ router = APIRouter(
 )
 
 
+def team_scope(actor: Identity):
+    return (Appraisal.manager_id == actor.user.id, Appraisal.employee_id != actor.user.id)
+
+
+@router.get("/dashboard", response_model=dict[str, int])
+def dashboard(
+    by_stage: bool = False,
+    actor: Identity = Depends(require_role(RoleCode.MANAGER)),
+    db: Session = Depends(get_db),
+):
+    stage = appraisal_stage() if by_stage else Appraisal.state
+    query = select(stage, func.count(Appraisal.id)).select_from(Appraisal).where(*team_scope(actor))
+    if by_stage:
+        query = query.outerjoin(Acknowledgement, Acknowledgement.appraisal_id == Appraisal.id)
+    counts = db.execute(query.group_by(stage))
+    return dict(counts.tuples().all())
+
+
 @router.get("/appraisals", response_model=TeamPage)
 def assigned_appraisals(
     q: str = Query("", max_length=150),
@@ -34,25 +53,29 @@ def assigned_appraisals(
         None,
         pattern="^(DRAFT|SUBMITTED|UNDER_REVIEW|RETURNED_FOR_REVISION|HR_REVIEW|HR_APPROVED|FINALIZED|RELEASED)$",
     ),
+    release_ready: bool = False,
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     actor: Identity = Depends(require_role(RoleCode.MANAGER)),
     db: Session = Depends(get_db),
 ):
-    query = (
-        select(Appraisal)
-        .join(User, User.id == Appraisal.employee_id)
-        .where(
-            Appraisal.manager_id == actor.user.id,
-            Appraisal.employee_id != actor.user.id,
-        )
-    )
+    query = select(Appraisal).join(User, User.id == Appraisal.employee_id).where(*team_scope(actor))
     if q:
         query = query.where(
             or_(User.full_name.icontains(q, autoescape=True), User.employee_id.icontains(q, autoescape=True))
         )
     if state:
         query = query.where(Appraisal.state == state)
+    if release_ready:
+        query = (
+            query.join(Cycle, Cycle.id == Appraisal.cycle_id)
+            .join(FinalEvaluation, FinalEvaluation.appraisal_id == Appraisal.id)
+            .where(
+                Appraisal.state == "HR_APPROVED",
+                Cycle.state == "ACTIVE",
+                ~select(Release.appraisal_id).where(Release.appraisal_id == Appraisal.id).exists(),
+            )
+        )
     total = db.scalar(select(func.count()).select_from(query.subquery()))
     appraisals = db.scalars(
         query.order_by(Appraisal.submitted_at.desc(), Appraisal.id)

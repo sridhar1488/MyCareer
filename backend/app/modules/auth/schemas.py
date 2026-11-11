@@ -1,3 +1,5 @@
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, SecretStr, field_validator
 
 
@@ -37,6 +39,9 @@ class UserResponse(BaseModel):
     department: str
     designation: str
     country: str
+    date_joined: date | None
+    manager_name: str | None
+    profile_photo_revision: str | None = None
     roles: list[str]
     must_change_password: bool
 

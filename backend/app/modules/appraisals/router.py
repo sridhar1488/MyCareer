@@ -1,11 +1,16 @@
+from io import BytesIO
 from pathlib import Path
+from struct import error as StructError
+from typing import Literal
 from urllib.parse import unquote
 from uuid import uuid4
 
 from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.responses import FileResponse
-from sqlalchemy import delete, func, or_, select
-from sqlalchemy.orm import Session
+from olefile import DEFECT_INCORRECT, OleFileIO, isOleFile
+from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.orm import Session, aliased
+from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import Identity, active_identity, csrf, get_db, require_role
 from app.core.errors import AppError
@@ -21,8 +26,10 @@ from app.modules.appraisals.models import (
     Participant,
 )
 from app.modules.appraisals.schemas import (
+    CYCLE_PARTICIPANT_LIMIT,
     AppraisalPage,
     AppraisalResponse,
+    BulkParticipantOptions,
     CycleEdit,
     CycleInput,
     CyclePage,
@@ -38,12 +45,13 @@ from app.modules.appraisals.schemas import (
 from app.modules.audit.models import AuditEvent
 from app.modules.reviews import service as review_service
 from app.modules.reviews.schemas import AcknowledgeInput, ReleasedResult
-from app.modules.users.models import OperatorGuard, RoleCode, User
+from app.modules.users.models import OperatorGuard, RoleCode, User, UserRole
 
 router = APIRouter(tags=["Employee appraisals"])
 hr = [Depends(require_role(RoleCode.SUPER_ADMIN))]
 
 ATTACHMENT_LIMIT = 10 * 1024 * 1024
+OUTLOOK_MESSAGE_TYPE = "application/vnd.ms-outlook"
 ATTACHMENT_TYPES = {
     ".pdf": "application/pdf",
     ".png": "image/png",
@@ -52,7 +60,22 @@ ATTACHMENT_TYPES = {
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     ".pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    ".msg": OUTLOOK_MESSAGE_TYPE,
 }
+
+
+def is_outlook_message(data: bytearray) -> bool:
+    source = BytesIO(data)
+    if not isOleFile(source):
+        return False
+    try:
+        with OleFileIO(source, raise_defects=DEFECT_INCORRECT) as container:
+            # MS-OXMSG specifies a top-level property stream with a 32-byte header and 16-byte entries.
+            with container.openstream("__properties_version1.0") as properties:
+                size = properties.getbuffer().nbytes
+                return size > 32 and (size - 32) % 16 == 0
+    except (OSError, ValueError, IndexError, OverflowError, RecursionError, StructError):
+        return False
 
 
 def attachment_access(db, appraisal_id, actor, write=False):
@@ -79,11 +102,80 @@ def attachment_access(db, appraisal_id, actor, write=False):
         appraisal.content_revision < 1 or appraisal.state in {"DRAFT", "RETURNED_FOR_REVISION"}
     ):
         raise AppError(404, "NOT_FOUND", "Submitted attachments are not available.")
-    if write and (not owner or appraisal.state not in service.EDITABLE_STATES):
+    if write:
+        require_editable_attachments(appraisal)
+    return appraisal
+
+
+def require_editable_attachments(appraisal):
+    if appraisal.state not in service.EDITABLE_STATES:
         raise AppError(
             409, "APPRAISAL_READ_ONLY", "Attachments can only be changed while your appraisal is editable."
         )
-    return appraisal
+
+
+def attachment_directory(settings):
+    directory = Path(settings.attachment_directory)
+    return directory if directory.is_absolute() else Path(__file__).resolve().parents[4] / directory
+
+
+def same_attachment_content(path, data):
+    try:
+        with path.open("rb") as stored:
+            view = memoryview(data)
+            chunk_size = 64 * 1024
+            for offset in range(0, len(data), chunk_size):
+                if stored.read(chunk_size) != view[offset : offset + chunk_size]:
+                    return False
+            return not stored.read(1)
+    except FileNotFoundError:
+        return False
+
+
+def store_attachment(db, appraisal_id, actor, directory, filename, media, ext, data):
+    if db.get_bind().dialect.name == "sqlite":
+        # SQLite ignores FOR UPDATE. Acquire its write lock before reading the attachment list.
+        db.execute(update(Appraisal).where(Appraisal.id == appraisal_id).values(state=Appraisal.state))
+    appraisal = attachment_access(db, appraisal_id, actor, write=True)
+    existing = db.scalars(
+        select(AppraisalAttachment)
+        .where(AppraisalAttachment.appraisal_id == appraisal_id, AppraisalAttachment.deleted_at.is_(None))
+        .with_for_update()
+    ).all()
+    for attachment in existing:
+        if attachment.byte_size == len(data) and same_attachment_content(
+            directory / attachment.object_key, data
+        ):
+            raise AppError(
+                409,
+                "DUPLICATE_ATTACHMENT",
+                f"This file is already attached as “{attachment.original_name}”.",
+            )
+    if len(existing) >= 25:
+        raise AppError(422, "FILE_LIMIT", "An appraisal can have up to 25 attachments.")
+
+    directory.mkdir(parents=True, exist_ok=True)
+    object_key = f"{uuid4().hex}{ext}"
+    path = directory / object_key
+    item = AppraisalAttachment(
+        appraisal_id=appraisal.id,
+        uploader_id=actor.user.id,
+        original_name=filename,
+        object_key=object_key,
+        media_type=media,
+        byte_size=len(data),
+    )
+    db.add(item)
+    db.add(
+        AuditEvent(actor_id=actor.user.id, action="appraisal.attachment_uploaded", resource_id=appraisal.id)
+    )
+    try:
+        path.write_bytes(data)
+        db.commit()
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    return attachment_row(item)
 
 
 def attachment_row(item):
@@ -119,7 +211,7 @@ def list_attachments(
 async def upload_attachment(
     appraisal_id: str, request: Request, actor: Identity = Depends(csrf), db: Session = Depends(get_db)
 ):
-    appraisal = attachment_access(db, appraisal_id, actor, write=True)
+    require_editable_attachments(service.owned(db, appraisal_id, actor))
     filename = (
         unquote(request.headers.get("x-file-name", "attachment")).replace("\\", "/").split("/")[-1].strip()
     )
@@ -128,7 +220,9 @@ async def upload_attachment(
     media = ATTACHMENT_TYPES.get(ext)
     if not media:
         raise AppError(
-            422, "FILE_TYPE", "Attach a PDF, PNG/JPG image, Word document, Excel workbook or PowerPoint file."
+            422,
+            "FILE_TYPE",
+            "Attach a PDF, PNG/JPG image, Word document, Excel workbook, PowerPoint file or Outlook message (.msg).",
         )
     data = bytearray()
     async for chunk in request.stream():
@@ -141,11 +235,10 @@ async def upload_attachment(
         or (ext in {".jpg", ".jpeg"} and data.startswith(b"\xff\xd8\xff"))
     )
     if ext in {".docx", ".xlsx", ".pptx"}:
-        import io
         import zipfile
 
         try:
-            with zipfile.ZipFile(io.BytesIO(data)) as archive:
+            with zipfile.ZipFile(BytesIO(data)) as archive:
                 members = archive.namelist()
                 entries = archive.infolist()
                 with archive.open("[Content_Types].xml") as content_types:
@@ -158,40 +251,22 @@ async def upload_attachment(
                 valid = valid and not any(part.casefold().endswith("vbaproject.bin") for part in members)
         except (ValueError, OSError, RuntimeError, zipfile.BadZipFile, KeyError):
             valid = False
+    if ext == ".msg":
+        valid = is_outlook_message(data)
     if not valid or not data:
         raise AppError(422, "FILE_CONTENT", "The file content does not match the selected file type.")
-    count = (
-        db.scalar(
-            select(func.count())
-            .select_from(AppraisalAttachment)
-            .where(AppraisalAttachment.appraisal_id == appraisal_id, AppraisalAttachment.deleted_at.is_(None))
-        )
-        or 0
+    # Read the request before locking, and keep the blocking database and file work off the event loop.
+    return await run_in_threadpool(
+        store_attachment,
+        db,
+        appraisal_id,
+        actor,
+        attachment_directory(request.app.state.settings),
+        filename,
+        media,
+        ext,
+        data,
     )
-    if count >= 25:
-        raise AppError(422, "FILE_LIMIT", "An appraisal can have up to 25 attachments.")
-    settings = request.app.state.settings
-    directory = Path(settings.attachment_directory)
-    if not directory.is_absolute():
-        directory = Path(__file__).resolve().parents[4] / directory
-    directory.mkdir(parents=True, exist_ok=True)
-    object_key = f"{uuid4().hex}{ext}"
-    path = directory / object_key
-    path.write_bytes(data)
-    item = AppraisalAttachment(
-        appraisal_id=appraisal.id,
-        uploader_id=actor.user.id,
-        original_name=filename or f"attachment{ext}",
-        object_key=object_key,
-        media_type=media,
-        byte_size=len(data),
-    )
-    db.add(item)
-    db.add(
-        AuditEvent(actor_id=actor.user.id, action="appraisal.attachment_uploaded", resource_id=appraisal.id)
-    )
-    db.commit()
-    return attachment_row(item)
 
 
 @router.get("/appraisals/{appraisal_id}/attachments/{attachment_id}")
@@ -214,17 +289,16 @@ def download_attachment(
     item = db.scalar(query)
     if not item:
         raise AppError(404, "NOT_FOUND", "Attachment not found.")
-    directory = Path(request.app.state.settings.attachment_directory)
-    if not directory.is_absolute():
-        directory = Path(__file__).resolve().parents[4] / directory
-    path = directory / item.object_key
+    path = attachment_directory(request.app.state.settings) / item.object_key
     if not path.is_file():
         raise AppError(404, "NOT_FOUND", "Attachment not found.")
     return FileResponse(
         path,
         media_type=item.media_type,
         filename=item.original_name,
-        content_disposition_type="inline" if inline else "attachment",
+        content_disposition_type="inline"
+        if inline and item.media_type != OUTLOOK_MESSAGE_TYPE
+        else "attachment",
         headers={
             "Content-Security-Policy": "default-src 'none'; sandbox",
             "X-Content-Type-Options": "nosniff",
@@ -327,6 +401,35 @@ def participant_options(
     )
 
 
+@router.get("/cycles/participant-options/bulk", response_model=BulkParticipantOptions, dependencies=hr)
+def bulk_participant_options(role: Literal["EMPLOYEE", "MANAGER"], db: Session = Depends(get_db)):
+    manager = aliased(User)
+    has_reviewer = (
+        select(manager.id)
+        .join(UserRole, UserRole.user_id == manager.id)
+        .where(
+            manager.id == User.manager_id,
+            manager.id != User.id,
+            manager.active.is_(True),
+            UserRole.role_code == RoleCode.MANAGER,
+        )
+        .exists()
+    )
+    active_role = select(User.id).where(
+        User.active.is_(True),
+        User.id.in_(select(UserRole.user_id).where(UserRole.role_code == role)),
+    )
+    ids = list(
+        db.scalars(active_role.where(has_reviewer).order_by(User.id).limit(CYCLE_PARTICIPANT_LIMIT + 1))
+    )
+    if len(ids) > CYCLE_PARTICIPANT_LIMIT:
+        raise AppError(
+            422, "PARTICIPANT_LIMIT", f"A cycle can include up to {CYCLE_PARTICIPANT_LIMIT:,} participants."
+        )
+    skipped = db.scalar(select(func.count()).select_from(active_role.where(~has_reviewer).subquery()))
+    return BulkParticipantOptions(participant_ids=ids, skipped=skipped or 0)
+
+
 @router.get("/cycles", response_model=CyclePage, dependencies=hr)
 def cycles(
     page: int = Query(1, ge=1), page_size: int = Query(25, ge=1, le=100), db: Session = Depends(get_db)
@@ -419,7 +522,7 @@ def own_appraisals(
 def appraisal_detail(
     appraisal_id: str, actor: Identity = Depends(active_identity), db: Session = Depends(get_db)
 ):
-    return service.detail(db, service.owned(db, appraisal_id, actor))
+    return service.detail(db, service.owned(db, appraisal_id, actor), include_draft_save_time=True)
 
 
 @router.put(

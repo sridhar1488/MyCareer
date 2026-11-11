@@ -3,6 +3,7 @@ from typing import Literal
 from pydantic import Field, StrictBool, StrictInt, model_validator
 
 from app.modules.auth.schemas import StrictInput
+from app.modules.forms.text_limits import HEADER_LIMIT, RESPONSE_LIMIT, TEXT_MINIMUM
 
 
 class Weights(StrictInput):
@@ -37,6 +38,8 @@ class FormConfig(StrictInput):
     competencies_title: str = Field(default="Professional competencies", min_length=1, max_length=150)
     development_title: str = Field(default="Achievements and development", min_length=1, max_length=150)
     goals_limit: StrictInt = Field(default=100, ge=1, le=100)
+    goal_title_max_length: StrictInt = Field(default=HEADER_LIMIT, ge=TEXT_MINIMUM, le=HEADER_LIMIT)
+    goal_description_max_length: StrictInt = Field(default=RESPONSE_LIMIT, ge=TEXT_MINIMUM, le=RESPONSE_LIMIT)
     contributions_limit: StrictInt = Field(default=3, ge=1, le=100)
     contributions_enabled: StrictBool = True
     competencies_enabled: StrictBool = True

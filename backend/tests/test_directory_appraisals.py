@@ -1,13 +1,14 @@
-from datetime import timedelta
+from datetime import date, timedelta
 
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import DatabaseError
 
 from app.db.base import utcnow
-from app.modules.appraisals.models import Appraisal, AppraisalHistory, Cycle
+from app.modules.appraisals.models import Appraisal, AppraisalHistory, AppraisalItem, Cycle, DevelopmentPlan
+from app.modules.appraisals.schemas import DevelopmentInput
 from app.modules.auth.models import Credential
-from app.modules.users.models import ReportingRelationship, User
+from app.modules.users.models import ReportingRelationship, RoleCode, User, UserRole
 from tests.conftest import PASSWORD
 
 
@@ -41,6 +42,9 @@ def cycle_body(ids, **overrides):
 
 
 def draft(version=1, count=1, **overrides):
+    development = dict.fromkeys(DevelopmentInput.model_fields.keys() - {"extra_answers"}, "NA")
+    development.update(support_requested="Mentoring")
+    development.update(overrides.pop("development", {}))
     return {
         "expected_version": version,
         "goals": [
@@ -48,7 +52,7 @@ def draft(version=1, count=1, **overrides):
             for i in range(count)
         ],
         "contributions": [],
-        "development": {"support_requested": "Mentoring"},
+        "development": development,
         **overrides,
     }
 
@@ -69,6 +73,52 @@ def setup_appraisal(client, signin, user_factory, factory):
     h = headers(signin, employee)
     appraisal = client.get("/api/v1/me/appraisals").json()["items"][0]
     return admin, manager, employee, appraisal, h
+
+
+def test_bulk_cycle_participants_resolve_eligible_roles_across_pages(client, signin, user_factory, factory):
+    admin = user_factory("SUPER_ADMIN")
+    reviewer = user_factory("MANAGER")
+    eligible_manager = user_factory("MANAGER")
+    inactive_employee = user_factory(active=False)
+    unassigned_employee = user_factory()
+    ineligible_employee = user_factory()
+    with factory.begin() as db:
+        db.get(User, eligible_manager.id).manager_id = reviewer.id
+        db.add(UserRole(user_id=eligible_manager.id, role_code=RoleCode.SUPER_ADMIN))
+        db.get(User, inactive_employee.id).manager_id = reviewer.id
+        db.get(User, ineligible_employee.id).manager_id = unassigned_employee.id
+        employees = [
+            User(
+                employee_id=f"BULK-{index}",
+                email=f"bulk-{index}@example.org",
+                full_name=f"Bulk employee {index}",
+                manager_id=reviewer.id,
+                role_assignments=[UserRole(role_code=RoleCode.EMPLOYEE)],
+            )
+            for index in range(26)
+        ]
+        db.add_all(employees)
+        db.flush()
+        expected = {employee.id for employee in employees}
+
+    admin_headers = headers(signin, admin)
+    path = "/api/v1/cycles/participant-options/bulk"
+    selected = client.get(path, params={"role": "EMPLOYEE"}).json()
+    assert set(selected["participant_ids"]) == expected
+    assert selected["skipped"] == 2
+    managers = client.get(path, params={"role": "MANAGER"}).json()
+    assert managers == {"participant_ids": [eligible_manager.id], "skipped": 1}
+    assert client.get(path, params={"role": "SUPER_ADMIN"}).status_code == 422
+
+    ids = [*selected["participant_ids"], *managers["participant_ids"]]
+    created = client.post("/api/v1/cycles", json=cycle_body(ids), headers=admin_headers)
+    assert created.status_code == 201, created.text
+    cycle = created.json()
+    assert set(cycle["participant_ids"]) == {*expected, eligible_manager.id}
+    activated = client.post(
+        f"/api/v1/cycles/{cycle['id']}/activate", json={"expected_version": 1}, headers=admin_headers
+    )
+    assert activated.status_code == 200, activated.text
 
 
 def test_create_profile_duplicate_and_no_credential_disclosure(client, signin, user_factory, factory):
@@ -115,6 +165,7 @@ def test_directory_and_cycles_are_super_admin_only(client, signin, user_factory,
     h = headers(signin, user)
     for path in ["/admin/users", "/admin/audit-events", "/cycles", "/cycles/participant-options"]:
         assert client.get("/api/v1" + path).status_code == 403
+    assert client.get("/api/v1/cycles/participant-options/bulk?role=EMPLOYEE").status_code == 403
     assert (
         client.post(
             "/api/v1/admin/users", json=profile(role="EMPLOYEE", temporary_password=PASSWORD), headers=h
@@ -240,10 +291,14 @@ def test_employee_save_extra_goals_submit_immutable_snapshot(client, factory, se
     response = client.put(path + "/self-assessment", json=draft(count=7), headers=h)
     assert response.status_code == 200, response.text
     assert len(response.json()["goals"]) == 7 and response.json()["started_at"]
+    last_draft_saved_at = response.json()["last_draft_saved_at"]
+    assert last_draft_saved_at and last_draft_saved_at.endswith("Z")
     assert client.put(path + "/self-assessment", json=draft(), headers=h).status_code == 409
+    assert client.get(path).json()["last_draft_saved_at"] == last_draft_saved_at
     submitted = client.post(path + "/submit", json={"expected_version": 2}, headers=h)
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["state"] == "SUBMITTED" and not submitted.json()["editable"]
+    assert submitted.json()["last_draft_saved_at"] == last_draft_saved_at
     assert client.put(path + "/self-assessment", json=draft(3), headers=h).status_code == 409
     assert client.post(path + "/submit", json={"expected_version": 3}, headers=h).status_code == 409
     snapshot = client.get(path + "/revisions/1").json()
@@ -255,6 +310,92 @@ def test_employee_save_extra_goals_submit_immutable_snapshot(client, factory, se
             with pytest.raises(DatabaseError):
                 db.execute(text(f"DELETE FROM {table}"))
             db.rollback()
+
+
+def test_assessment_character_limits_preserve_existing_long_drafts(client, factory, setup_appraisal):
+    _, _, _, appraisal, h = setup_appraisal
+    path = f"/api/v1/appraisals/{appraisal['id']}"
+    goal = {"description": "G" * 500, "employee_narrative": "A" * 1000}
+    for section, error in (("goals", "GOAL_TEXT_LIMIT"), ("contributions", "CONTRIBUTION_TEXT_LIMIT")):
+        for field in goal:
+            over_limit = {**goal, field: goal[field] + "x"}
+            response = client.put(path + "/self-assessment", json=draft(**{section: [over_limit]}), headers=h)
+            assert response.status_code == 422
+            assert response.json()["error"]["code"] == error
+    response = client.put(
+        path + "/self-assessment", json=draft(development={"development_plan": "D" * 1001}), headers=h
+    )
+    assert response.status_code == 422
+    assert response.json()["error"]["code"] == "APPRAISAL_TEXT_LIMIT"
+    saved = client.put(path + "/self-assessment", json=draft(goals=[goal], contributions=[goal]), headers=h)
+    assert saved.status_code == 200, saved.text
+
+    # Simulate data saved under the original limits.
+    legacy = {**goal, "description": "G" * 501}
+    legacy_contribution = {**goal, "employee_narrative": "A" * 1001}
+    legacy_development = "D" * 1001
+    with factory.begin() as db:
+        items = db.scalars(select(AppraisalItem).where(AppraisalItem.appraisal_id == appraisal["id"]))
+        by_kind = {item.kind: item for item in items}
+        by_kind["GOAL"].description = legacy["description"]
+        by_kind["CONTRIBUTION"].employee_narrative = legacy_contribution["employee_narrative"]
+        db.get(DevelopmentPlan, appraisal["id"]).development_plan = legacy_development
+
+    duplicate = client.put(path + "/self-assessment", json=draft(2, goals=[legacy, legacy]), headers=h)
+    assert duplicate.status_code == 422
+    edited = {**legacy, "employee_narrative": "Updated achievement"}
+    saved = client.put(
+        path + "/self-assessment",
+        json=draft(
+            2,
+            goals=[edited],
+            contributions=[legacy_contribution],
+            development={"development_plan": legacy_development},
+        ),
+        headers=h,
+    )
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["goals"] == [edited]
+    assert saved.json()["contributions"] == [legacy_contribution]
+    assert saved.json()["development"]["development_plan"] == legacy_development
+    submitted = client.post(path + "/submit", json={"expected_version": 3}, headers=h)
+    assert submitted.status_code == 200, submitted.text
+
+
+def test_each_development_answer_is_required_only_at_submission(client, setup_appraisal):
+    _, _, _, appraisal, h = setup_appraisal
+    path = f"/api/v1/appraisals/{appraisal['id']}"
+    version = 1
+    for field in draft()["development"]:
+        saved = client.put(
+            path + "/self-assessment", json=draft(version, development={field: "  "}), headers=h
+        )
+        assert saved.status_code == 200, saved.text
+        version = saved.json()["version"]
+        rejected = client.post(path + "/submit", json={"expected_version": version}, headers=h)
+        assert rejected.status_code == 422
+        assert rejected.json()["error"]["code"] == "INCOMPLETE_APPRAISAL"
+        assert field.replace("_", " ") in rejected.json()["error"]["message"]
+
+    saved = client.put(
+        path + "/self-assessment", json=draft(version, development={"support_requested": " N "}), headers=h
+    )
+    assert saved.status_code == 200, saved.text
+    version = saved.json()["version"]
+    rejected = client.post(path + "/submit", json={"expected_version": version}, headers=h)
+    assert rejected.status_code == 422
+    assert "support requested" in rejected.json()["error"]["message"]
+
+    body = draft(
+        version,
+        goals=[{"description": "Goal title", "employee_narrative": "NA"}],
+        contributions=[{"description": "Contribution", "employee_narrative": "N/A"}],
+    )
+    saved = client.put(path + "/self-assessment", json=body, headers=h)
+    assert saved.status_code == 200, saved.text
+    submitted = client.post(path + "/submit", json={"expected_version": saved.json()["version"]}, headers=h)
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["development"]["development_plan"] == "NA"
 
 
 @pytest.mark.parametrize("role", ["SUPER_ADMIN", "MANAGER", "EMPLOYEE"])
@@ -342,6 +483,9 @@ def test_reassignment_preserves_snapshot_and_protects_reviewer(
 ):
     admin, manager, employee, a, _ = setup_appraisal
     other = user_factory("MANAGER")
+    with factory.begin() as db:
+        db.get(User, employee.id).date_joined = date(2024, 1, 15)
+        db.get(User, other.id).full_name = "New Reporting Manager"
     h = headers(signin, admin)
     assert (
         client.put(
@@ -359,6 +503,34 @@ def test_reassignment_preserves_snapshot_and_protects_reviewer(
         assert response.status_code == 409 and response.json()["error"]["code"] == "MANAGER_HAS_APPRAISALS"
     with factory() as db:
         assert db.get(Appraisal, a["id"]).manager_id == manager.id
+
+    cycle = client.post(
+        "/api/v1/cycles",
+        json=cycle_body(
+            [employee.id], title="Cross-year review", period_start="2026-07-01", period_end="2027-06-30"
+        ),
+        headers=h,
+    )
+    assert cycle.status_code == 201, cycle.text
+    cycle_id = cycle.json()["id"]
+    assert (
+        client.post(
+            f"/api/v1/cycles/{cycle_id}/activate", json={"expected_version": 1}, headers=h
+        ).status_code
+        == 200
+    )
+
+    login_profile = signin(employee).json()["user"]
+    assert login_profile == client.get("/api/v1/auth/me").json()
+    assert login_profile["date_joined"] == "2024-01-15"
+    assert login_profile["manager_name"] == "New Reporting Manager"
+    assigned = {row["cycle_id"]: row for row in client.get("/api/v1/me/appraisals").json()["items"]}
+    original, latest = assigned[a["cycle_id"]], assigned[cycle_id]
+    assert (original["period_start"], original["period_end"]) == ("2026-01-01", "2026-12-31")
+    assert (latest["period_start"], latest["period_end"]) == ("2026-07-01", "2027-06-30")
+    assert original["manager_name"] == manager.full_name
+    assert latest["manager_name"] == "New Reporting Manager"
+    assert client.get(f"/api/v1/appraisals/{a['id']}").json()["manager_name"] == manager.full_name
 
 
 @pytest.mark.parametrize("role", ["SUPER_ADMIN", "MANAGER"])

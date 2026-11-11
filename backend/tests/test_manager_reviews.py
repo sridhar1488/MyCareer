@@ -27,20 +27,39 @@ def save_body(review):
     }
 
 
-def test_manager_dashboard_hides_unsubmitted_content(client, signin, setup_appraisal):
-    _, manager, _, a, _ = setup_appraisal
+def test_manager_dashboard_hides_unsubmitted_content(client, signin, setup_appraisal, user_factory):
+    admin, manager, employee, a, _ = setup_appraisal
+    summary = "/api/v1/manager/dashboard?by_stage=true"
     headers(signin, manager)
     page = client.get("/api/v1/manager/appraisals?page_size=1").json()
     assert page["total"] == 1 and len(page["items"]) == 1
     assert page["items"][0]["submitted_revision"] == 0
     assert "goals" not in str(page)
     assert client.get(f"/api/v1/manager/appraisals/{a['id']}").status_code == 404
+    assert client.get("/api/v1/manager/dashboard").json() == {"DRAFT": 1}
+    assert client.get(summary).json() == {"NOT_STARTED": 1}
+    employee_headers = headers(signin, employee)
+    assert client.get(summary).status_code == 403
+    saved = client.put(
+        f"/api/v1/appraisals/{a['id']}/self-assessment", json=draft(), headers=employee_headers
+    )
+    assert saved.status_code == 200, saved.text
+    headers(signin, manager)
+    assert client.get(summary).json() == {"DRAFT": 1}
+    headers(signin, user_factory("MANAGER"))
+    assert client.get(summary).json() == {}
+    headers(signin, admin)
+    assert client.get(summary).status_code == 403
 
 
 def test_save_manager_review_keeps_employee_content_unchanged(client, submitted_review, factory):
     _, _, _, review, h = submitted_review
     path = f"/api/v1/manager/appraisals/{review['appraisal']['id']}"
     body = save_body(review)
+    body["evaluation"]["goals"][0] = {"rating": 4, "comment": "😀" * 501}
+    rejected = client.put(path + "/review", json=body, headers=h)
+    assert rejected.status_code == 422
+    assert rejected.json()["error"]["code"] == "APPRAISAL_TEXT_LIMIT"
     body["evaluation"]["goals"][0] = {"rating": 4, "comment": "Specific manager feedback"}
     response = client.put(path + "/review", json=body, headers=h)
     assert response.status_code == 200, response.text
@@ -51,6 +70,15 @@ def test_save_manager_review_keeps_employee_content_unchanged(client, submitted_
     assert history["total"] == 1 and history["items"][0]["evaluation"]["goals"][0]["rating"] == 4
     with factory() as db:
         assert db.scalar(select(ReviewDraft)).submitted_revision == 1
+    legacy = "Long manager feedback " * 55
+    with factory.begin() as db:
+        review_draft = db.scalar(select(ReviewDraft))
+        review_draft.evaluation = {**review_draft.evaluation, "strengths": legacy}
+    updated = save_body(client.get(path).json())
+    updated["evaluation"]["improvements"] = "I" * 1000
+    saved = client.put(path + "/review", json=updated, headers=h)
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["evaluation"]["strengths"] == legacy
 
 
 @pytest.mark.parametrize("value", [0, 6, -1, 1.5, True, "4"])

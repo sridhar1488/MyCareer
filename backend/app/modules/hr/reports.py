@@ -1,12 +1,86 @@
-"""Exports use the preserved sign-off, never editable drafts or recalculated scores."""
+"""Exports for approved evaluations and the HR calibration queue."""
 
+from datetime import date, datetime
 from io import BytesIO
 
 from openpyxl import Workbook
+from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Font, PatternFill
 
 from app.modules.forms.config import config_for
+
+
+def calibration_excel(records):
+    book = Workbook(write_only=True)
+    grid = book.create_sheet("Calibration queue")
+    heading = Font(color="FFFFFF", bold=True)
+    fill = PatternFill("solid", fgColor="482563")
+    alignment = Alignment(vertical="top", wrap_text=True)
+
+    def append(values, header=False):
+        cells = []
+        for value in values:
+            cell = WriteOnlyCell(grid, value=value)
+            if isinstance(value, str):
+                cell.value = ILLEGAL_CHARACTERS_RE.sub("", value)
+                cell.data_type = "s"
+            elif isinstance(value, float):
+                cell.number_format = "0.0"
+            elif isinstance(value, datetime):
+                cell.number_format = "yyyy-mm-dd hh:mm"
+            elif isinstance(value, date):
+                cell.number_format = "yyyy-mm-dd"
+            cell.alignment = alignment
+            if header:
+                cell.font = heading
+                cell.fill = fill
+            cells.append(cell)
+        grid.append(cells)
+
+    grid.freeze_panes = "B2"
+    for index, width in enumerate([18, 28, 36, 16, 23, 28, 28, 19, 20, 26, 25]):
+        grid.column_dimensions[chr(65 + index)].width = width
+
+    append(
+        [
+            "Employee ID",
+            "EMP Name",
+            "Email",
+            "Joining Date",
+            "Department",
+            "Manager",
+            "Cycle",
+            "Manager score / 5",
+            "Calibrated score / 5",
+            "Approval status",
+            "Manager submitted (UTC)",
+        ],
+        header=True,
+    )
+    count = 0
+    for row in records:
+        append(
+            [
+                row["employee_id"],
+                row["employee_name"],
+                row["employee_email"],
+                row["date_joined"],
+                row["department"],
+                row["manager_name"],
+                row["cycle_title"],
+                float(row["manager_overall"]),
+                float(row["calibrated_overall"]),
+                "Waiting for HR approval",
+                row["manager_submitted_at"],
+            ]
+        )
+        count += 1
+
+    grid.auto_filter.ref = f"A1:K{count + 1}"
+    stream = BytesIO()
+    book.save(stream)
+    return stream.getvalue(), count
 
 
 def narratives(result):
@@ -50,8 +124,6 @@ def excel(records):
             "Manager",
             "Status",
             "Approved Date",
-            "Released Date",
-            "Acknowledged Date",
             "Overall / 5",
         ]
     )
@@ -89,8 +161,6 @@ def excel(records):
                 identity.get("manager_name", ""),
                 appraisal.state,
                 result.finalized_at,
-                result.released_at,
-                result.acknowledged_at,
                 float(result.score.overall.display),
             ]
         )

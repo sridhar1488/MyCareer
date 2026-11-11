@@ -11,10 +11,13 @@ from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import AuthSession, Credential, PasswordToken
 from app.modules.auth.schemas import UserResponse
-from app.modules.users.models import User
+from app.modules.users.models import User, UserProfilePhoto
 
 
-def profile(user: User, credential: Credential) -> UserResponse:
+def profile(db: Session, user: User, credential: Credential) -> UserResponse:
+    manager_name = (
+        db.scalar(select(User.full_name).where(User.id == user.manager_id)) if user.manager_id else None
+    )
     return UserResponse(
         id=user.id,
         employee_id=user.employee_id,
@@ -23,6 +26,11 @@ def profile(user: User, credential: Credential) -> UserResponse:
         department=user.department,
         designation=user.designation,
         country=user.country,
+        date_joined=user.date_joined,
+        manager_name=manager_name,
+        profile_photo_revision=db.scalar(
+            select(UserProfilePhoto.revision).where(UserProfilePhoto.user_id == user.id)
+        ),
         roles=user.roles,
         must_change_password=credential.must_change_password,
     )
@@ -62,7 +70,7 @@ def login(db: Session, settings: Settings, email: str, password: str):
     raw, csrf_token = issue_session(db, user, settings)
     db.add(AuditEvent(actor_id=user.id, action="auth.login", resource_id=user.id))
     db.commit()
-    return raw, csrf_token, profile(user, credential)
+    return raw, csrf_token, profile(db, user, credential)
 
 
 def revoke_all(db: Session, user: User):
@@ -100,7 +108,7 @@ def change_password(db: Session, settings: Settings, actor, current_password: st
     raw, csrf_token = issue_session(db, user, settings)
     db.add(AuditEvent(actor_id=user.id, action="auth.password_changed", resource_id=user.id))
     db.commit()
-    return raw, csrf_token, profile(user, credential)
+    return raw, csrf_token, profile(db, user, credential)
 
 
 def issue_reset(db: Session, settings: Settings, user: User):

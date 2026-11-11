@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { downloadFile } from '../../api/client';
 import { useApi } from '../../api/useApi';
 import { Feedback } from '../../components/Feedback';
 import { BellCurve } from './BellCurve';
@@ -6,6 +7,8 @@ import type { components } from '../../api/schema';
 
 type CycleOption = { id: string; label: string };
 type Analytics = components['schemas']['AnalyticsResponse'];
+const downloadFormats = [['xlsx', 'Excel'], ['pdf', 'PDF']] as const;
+type DownloadFormat = typeof downloadFormats[number][0];
 
 function scoreWidth(score: string | null) {
   return Math.max(0, Math.min(100, (Number(score ?? 0) / 5) * 100));
@@ -13,15 +16,35 @@ function scoreWidth(score: string | null) {
 
 export function AnalyticsDashboard({ cycles, revision }: { cycles: CycleOption[]; revision: number }) {
   const [cycle, setCycle] = useState('');
+  const [downloading, setDownloading] = useState<DownloadFormat | null>(null);
+  const [downloadError, setDownloadError] = useState('');
   const params = new URLSearchParams(cycle ? { cycle_id: cycle } : {});
   const { data, error, loading } = useApi<Analytics>(`/hr/analytics?${params}`, revision);
+
+  async function downloadAnalytics(format: DownloadFormat) {
+    setDownloading(format);
+    setDownloadError('');
+    try {
+      await downloadFile(`/hr/analytics/export/${format}?${params}`, `hr-analytics.${format}`);
+    } catch (error) {
+      setDownloadError(error instanceof Error ? error.message : 'Download failed. Please try again.');
+    } finally {
+      setDownloading(null);
+    }
+  }
 
   return <section className="panel hr-analytics">
     <div className="section-heading">
       <div><h2>People and performance analytics</h2><p className="muted">Scores include HR-approved evaluations only. Workflow progress counts all appraisals in scope.</p></div>
-      <label className="analytics-cycle">Cycle<select value={cycle} onChange={e => setCycle(e.target.value)}><option value="">All cycles</option>{cycles.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+      <div className="analytics-actions">
+        <label className="analytics-cycle">Cycle<select value={cycle} onChange={e => { setCycle(e.target.value); setDownloadError(''); }}><option value="">All cycles</option>{cycles.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}</select></label>
+        <div className="analytics-downloads">
+          {downloadFormats.map(([format, label]) => <button key={format} type="button" className="button" disabled={!data || downloading !== null} onClick={() => downloadAnalytics(format)}>{downloading === format ? 'Downloading…' : `Download analytics · ${label}`}</button>)}
+        </div>
+      </div>
     </div>
     {error && <Feedback message={error} />}
+    {downloadError && <Feedback message={downloadError} />}
     {loading && <p role="status">Loading analytics…</p>}
     {data && <>
       <div className="analytics-kpis">
@@ -29,7 +52,7 @@ export function AnalyticsDashboard({ cycles, revision }: { cycles: CycleOption[]
         <div><span>HR approved</span><strong>{data.summary.approved_count}<small> / {data.summary.appraisal_count} · {data.summary.approval_percent}%</small></strong></div>
         <div><span>Average approved score</span><strong>{data.summary.approved_average ? `${data.summary.approved_average} / 5` : '—'}</strong></div>
       </div>
-      <BellCurve points={data.score_points} />
+      <BellCurve points={data.score_points} distribution={data.distribution} />
       <div className="analytics-charts">
         <section className="analytics-chart" aria-labelledby="top-performers-heading">
           <h3 id="top-performers-heading">Top 5 performers</h3>

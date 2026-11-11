@@ -21,6 +21,7 @@ def test_each_role_authenticates_with_safe_profile(client, user_factory, signin,
     profile = response.json()["user"]
     assert profile["roles"] == [role]
     assert profile["employee_id"] == user.employee_id
+    assert profile["date_joined"] is None and profile["manager_name"] is None
     assert not {"password_hash", "credential_version", "active"} & profile.keys()
     cookie = response.headers["set-cookie"]
     assert "HttpOnly" in cookie and "SameSite=lax" in cookie and "Path=/api" in cookie

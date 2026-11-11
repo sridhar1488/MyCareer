@@ -42,7 +42,7 @@ def setup_link(
     actor: Identity = Depends(csrf),
     db: Session = Depends(get_db),
 ):
-    from app.modules.imports.service import setup_token
+    from app.modules.imports.service import setup_email_instructions, setup_token
 
     with service.admin_write(db, actor):
         user = service.versioned_user(db, user_id, data.expected_version)
@@ -71,9 +71,7 @@ def setup_link(
             else:
                 email_status = "queued"
                 body = (
-                    f"Hello {user.full_name},\n\nUse this one-time link to set your MyCareer password:\n"
-                    f"{result['setup_url']}\n\nThis link expires at "
-                    f"{result['expires_at']:%d %b %Y, %H:%M} UTC and can only be used once. "
+                    f"Hello {user.full_name},\n\n{setup_email_instructions(result, settings)}\n\n"
                     "If you did not expect a MyCareer account, contact your administrator."
                 )
             enqueue_email(db, settings, "Set up your MyCareer account", body, [user.email])
@@ -248,7 +246,8 @@ def change_role(
             may_add_manager = (
                 RoleCode.SUPER_ADMIN in current_roles
                 and requested_roles == {RoleCode.SUPER_ADMIN.value, RoleCode.MANAGER.value}
-                and current_roles in (
+                and current_roles
+                in (
                     {RoleCode.SUPER_ADMIN.value},
                     {RoleCode.SUPER_ADMIN.value, RoleCode.MANAGER.value},
                 )

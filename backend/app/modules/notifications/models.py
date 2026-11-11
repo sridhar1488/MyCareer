@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import JSON, DateTime, Integer, String, Text
+from sqlalchemy import JSON, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base import Base, utcnow
@@ -18,3 +18,24 @@ class NotificationOutbox(Base):
     sent_at: Mapped[datetime | None] = mapped_column(DateTime)
     attempts: Mapped[int] = mapped_column(Integer, default=0)
     last_error: Mapped[str | None] = mapped_column(String(500))
+
+
+class CycleReminderSettings(Base):
+    __tablename__ = "cycle_reminder_settings"
+    cycle_id: Mapped[str] = mapped_column(
+        ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), primary_key=True
+    )
+    manager_deadline: Mapped[datetime | None] = mapped_column(DateTime)
+    hr_deadline: Mapped[datetime | None] = mapped_column(DateTime)
+    hours_before: Mapped[list[int]] = mapped_column(JSON)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+
+
+class ScheduledReminder(Base):
+    __tablename__ = "scheduled_cycle_reminders"
+    cycle_id: Mapped[str] = mapped_column(
+        ForeignKey("appraisal_cycles.id", ondelete="CASCADE"), primary_key=True
+    )
+    stage: Mapped[str] = mapped_column(String(12), primary_key=True)
+    deadline: Mapped[datetime] = mapped_column(DateTime, primary_key=True)
+    hours_before: Mapped[int] = mapped_column(Integer, primary_key=True)

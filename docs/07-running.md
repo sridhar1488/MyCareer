@@ -182,6 +182,23 @@ sudo docker compose --env-file .env -f compose.onprem.yaml exec -it app \
 
 MySQL and appraisal attachments persist in explicitly named external Compose volumes selected by `MI_DATABASE_VOLUME` and `MI_ATTACHMENTS_VOLUME`; database name and user are explicit in `MI_DATABASE_NAME` and `MI_DATABASE_USER`. This avoids silently selecting a different volume or database when the Compose project name, folder or product name changes. Compose fails if required values are missing or selected volumes do not exist. Set up tested backups of both volumes before production use and every upgrade. Never run `docker compose down -v` on a live installation. For an upgrade, keep the existing volume names and database settings, back up both volumes, load the replacement image, run the migration command, recreate the app container, and verify readiness and known accounts before releasing the service.
 
+### Upgrade from a GitHub commit
+
+Build a fresh image from the commit you are deploying. The previously packaged `mycareer-app_1.1_linux_amd64.tar` predates the current migration head, `cyclereminders`. From the root of the checked-out repository, build the tag used by the on-prem Compose file:
+
+```sh
+sudo docker build -f deployment/app.Dockerfile -t mycareer-app:1.1 .
+```
+
+If you build on another host, transfer the rebuilt image to the deployment server using `docker save` and `docker load`. After backing up MySQL and attachments, run the following commands from the repository root on the server. Replace `/opt/mycareer/.env` with the path to your existing private deployment configuration if needed.
+
+```sh
+sudo docker compose --env-file /opt/mycareer/.env -f deployment/compose.onprem.yaml --profile tools run --rm migrate
+sudo docker compose --env-file /opt/mycareer/.env -f deployment/compose.onprem.yaml up -d --no-deps --force-recreate app
+```
+
+Verify `/api/v1/health/ready` at your deployment address. Then sign in and check the HR analytics downloads and one existing appraisal.
+
 ### Lifecycle email alerts
 
 The API queues lifecycle notifications in the same database transaction as the appraisal action, then sends them through the configured company SMTP relay. Failed deliveries are retried; SMTP credentials are read from environment variables and never stored in the outbox. Messages cover cycle launch (participant, with manager copied), employee submission (assigned manager, including return-for-revision guidance), manager return for revision (employee, including the manager's reason and deadline), manager submission for HR approval (active Super Admins), manager release (employee), bulk-import onboarding (employee, with a one-time setup link), and setup-link creation from User directory. Account passwords are never emailed. Setup links expire after seven days by default and work once; the lifetime is configurable with `MI_SETUP_LINK_MINUTES` up to 30 days.
@@ -200,8 +217,11 @@ MI_SMTP_USERNAME=hr-mailbox@your-company.com
 MI_SMTP_PASSWORD=enter-mailbox-password-here
 MI_SMTP_STARTTLS=true
 MI_PUBLIC_BASE_URL=https://mycareer.company.example
+MI_ALTERNATE_PUBLIC_BASE_URL=
 MI_SETUP_LINK_MINUTES=10080
 ```
+
+Set `MI_ALTERNATE_PUBLIC_BASE_URL` to include a second address in onboarding emails. Both addresses must reach the same MyCareer deployment and be listed in `MI_ALLOWED_ORIGINS`. Either address can complete password setup with the same one-time token.
 
 In test mode, every message is redirected to the test mailbox; real `To` and `Cc` recipients are included in the body for verification and are never sent the message. Onboarding and user-directory setup-link test emails omit working setup links. Verify event types and links. Only then set `MI_MAIL_TEST_MODE=false` to enable live delivery. Use an authorized sender and relay credentials supplied through the server's secret management process. Do not put secrets in chat, Git, or logs. Delivery uses an at-least-once queue, so a relay disconnect immediately after accepting a message can result in a duplicate retry. When changing an existing deployment, update `MI_SETUP_LINK_MINUTES` in its private `.env` to `10080` and recreate the app container; changing the example file alone does not alter a server's existing `.env`.
 

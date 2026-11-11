@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
+from starlette.concurrency import run_in_threadpool
 
-from app.api.dependencies import Identity, csrf, get_db, identity
+from app.api.dependencies import Identity, active_identity, csrf, get_db, identity
+from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
-from app.modules.auth import service
+from app.modules.auth import profile_photo, service
 from app.modules.auth.rate_limit import throttle
 from app.modules.auth.schemas import (
     LoginInput,
@@ -14,6 +16,7 @@ from app.modules.auth.schemas import (
     SessionResponse,
     UserResponse,
 )
+from app.modules.users.models import UserProfilePhoto
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
@@ -64,8 +67,34 @@ def login(data: LoginInput, request: Request, response: Response, db: Session = 
 
 
 @router.get("/me", response_model=UserResponse)
-def me(actor: Identity = Depends(identity)):
-    return service.profile(actor.user, actor.credential)
+def me(actor: Identity = Depends(identity), db: Session = Depends(get_db)):
+    return service.profile(db, actor.user, actor.credential)
+
+
+@router.get("/me/photo", response_class=Response, responses={200: {"content": {"image/jpeg": {}}}})
+def get_photo(actor: Identity = Depends(active_identity), db: Session = Depends(get_db)):
+    photo = db.get(UserProfilePhoto, actor.user.id)
+    if not photo:
+        raise AppError(404, "PHOTO_NOT_FOUND", "No profile picture is set.")
+    return Response(photo.image, media_type="image/jpeg", headers={"Cache-Control": "private, no-store"})
+
+
+@router.put("/me/photo", response_model=UserResponse, dependencies=[Depends(active_identity)])
+async def upload_photo(request: Request, actor: Identity = Depends(csrf), db: Session = Depends(get_db)):
+    data = bytearray()
+    async for chunk in request.stream():
+        if len(data) + len(chunk) > profile_photo.MAX_UPLOAD:
+            raise AppError(413, "PHOTO_TOO_LARGE", "Choose an image of 2 MB or less.")
+        data.extend(chunk)
+    image = await run_in_threadpool(profile_photo.normalize_photo, bytes(data))
+    await run_in_threadpool(profile_photo.change_photo, db, actor.user.id, image)
+    return await run_in_threadpool(service.profile, db, actor.user, actor.credential)
+
+
+@router.delete("/me/photo", response_model=UserResponse, dependencies=[Depends(active_identity)])
+def delete_photo(actor: Identity = Depends(csrf), db: Session = Depends(get_db)):
+    profile_photo.change_photo(db, actor.user.id, None)
+    return service.profile(db, actor.user, actor.credential)
 
 
 @router.get("/csrf")

@@ -8,6 +8,7 @@ from app.modules.appraisals.models import Appraisal, AppraisalHistory, Appraisal
 from app.modules.appraisals.schemas import AppraisalResponse
 from app.modules.audit.models import AuditEvent
 from app.modules.forms.config import config_for, text_errors
+from app.modules.forms.text_limits import validate_answer_lengths, validate_text_change
 from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.reviews import scoring
 from app.modules.reviews.models import (
@@ -123,7 +124,11 @@ def detail(db, appraisal):
         []
         if final
         else scoring.validation_errors(
-            evaluation, content, len(personal.form_definition["competencies"]), personal.form_definition
+            evaluation,
+            content,
+            len(personal.form_definition["competencies"]),
+            personal.form_definition,
+            enforce_minimum=not manager_submission,
         )
     )
     preview = (
@@ -187,6 +192,22 @@ def begin(db, appraisal, actor):
     return detail(db, appraisal)
 
 
+def validate_evaluation_text(evaluation, previous):
+    for field in ("strengths", "improvements"):
+        validate_text_change(getattr(evaluation, field), previous.get(field), field.capitalize())
+    validate_answer_lengths(evaluation.extra_answers, previous.get("extra_answers", {}))
+    for section in ("goals", "contributions", "competencies"):
+        saved = previous.get(section, [])
+        for index, entry in enumerate(getattr(evaluation, section)):
+            prior = saved[index] if index < len(saved) else {}
+            validate_text_change(entry.comment, prior.get("comment"), "Supporting evaluation comment")
+            validate_text_change(
+                entry.applicability_reason,
+                prior.get("applicability_reason"),
+                "Leadership applicability reason",
+            )
+
+
 def save(db, appraisal, data, actor):
     ensure_reviewable(appraisal)
     content = submitted(db, appraisal, True)
@@ -215,11 +236,13 @@ def save(db, appraisal, data, actor):
         raise AppError(
             422, "ITEM_MISMATCH", "Rate exactly the submitted goals, contributions and workbook competencies."
         )
+    draft = db.get(ReviewDraft, appraisal.id, with_for_update=True, populate_existing=True)
+    prior = draft.evaluation if draft and draft.submitted_revision == appraisal.content_revision else {}
+    validate_evaluation_text(evaluation, prior)
     if appraisal.state == "SUBMITTED":
         transition(db, appraisal, actor, "UNDER_REVIEW")
     else:
         appraisal.version += 1
-    draft = db.get(ReviewDraft, appraisal.id, with_for_update=True, populate_existing=True)
     if not draft:
         draft = ReviewDraft(appraisal_id=appraisal.id)
         db.add(draft)
@@ -293,7 +316,12 @@ def finalize(db, appraisal, data, actor):
     personal = employee_service.detail(db, appraisal)
     version = db.get(Cycle, appraisal.cycle_id).scoring_policy_version
     score = scoring.calculate(
-        evaluation, content, version, len(personal.form_definition["competencies"]), personal.form_definition
+        evaluation,
+        content,
+        version,
+        len(personal.form_definition["competencies"]),
+        personal.form_definition,
+        enforce_minimum=True,
     )
     db.add(
         ManagerSubmission(

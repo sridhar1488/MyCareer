@@ -299,10 +299,35 @@ def setup_token(db, user, settings):
     expires = utcnow() + timedelta(minutes=settings.setup_link_minutes)
     db.add(PasswordToken(user_id=user.id, token_hash=token_hash(raw), expires_at=expires))
     base_url = (settings.public_base_url or settings.allowed_origins[0]).rstrip("/")
+    setup_path = "/#reset=" + raw
     return {
         "user_id": user.id,
         "full_name": user.full_name,
         "email": user.email,
-        "setup_url": base_url + "/#reset=" + raw,
+        "setup_url": base_url + setup_path,
+        "alternate_setup_url": settings.alternate_public_base_url.rstrip("/") + setup_path
+        if settings.alternate_public_base_url
+        else None,
         "expires_at": expires,
     }
+
+
+def setup_email_instructions(link, settings):
+    setup_url = link["setup_url"]
+    alternate = link["alternate_setup_url"]
+    setup = f"Set your password using this one-time link: {setup_url}"
+    if alternate:
+        setup = (
+            "Choose either address to set your MyCareer password.\n"
+            f"Main setup link: {setup_url}\n"
+            f"Alternate setup link: {alternate}"
+        )
+    base_url = (settings.public_base_url or settings.allowed_origins[0]).rstrip("/")
+    instructions = (
+        f"{setup}\n\nYour setup access expires at {link['expires_at']:%d %b %Y, %H:%M} UTC "
+        "and can only be used once.\n\n"
+        f"After setup, sign in at {base_url} with your work email ({link['email']}) and the password you chose."
+    )
+    if alternate:
+        instructions += f"\nAlternate sign-in address: {settings.alternate_public_base_url.rstrip('/')}"
+    return instructions

@@ -107,6 +107,14 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
     h = headers(signin, manager)
     review = client.get(path, headers=h).json()
     score = review["final_result"]["score"]
+    queue = "/api/v1/manager/appraisals?state=HR_APPROVED&release_ready=true"
+    assert [item["id"] for item in client.get(queue).json()["items"]] == [identifier]
+    cycle_id = review["appraisal"]["cycle_id"]
+    with factory.begin() as db:
+        db.get(Cycle, cycle_id).state = "DRAFT"
+    assert client.get(queue).json()["total"] == 0
+    with factory.begin() as db:
+        db.get(Cycle, cycle_id).state = "ACTIVE"
     missing_meeting = client.post(
         path + "/release", json={**command(review), "review_meeting_confirmed": False}, headers=h
     )
@@ -118,6 +126,7 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
     assert released.status_code == 200, released.text
     review = released.json()
     assert review["final_result"]["score"] == score
+    assert client.get(queue).json()["total"] == 0
     assert (
         client.post(
             path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h
@@ -155,8 +164,14 @@ def test_incomplete_draft_cannot_finalize(client, submitted_review):
     _, _, _, review, h = submitted_review
     identifier = review["appraisal"]["id"]
     path = f"/api/v1/manager/appraisals/{identifier}"
-    review = client.put(path + "/review", json=save_body(review), headers=h).json()
-    assert not review["score_preview"] and review["validation_errors"]
+    body = save_body(review)
+    body["evaluation"] = evaluation().model_dump()
+    body["evaluation"]["strengths"] = " N "
+    saved = client.put(path + "/review", json=body, headers=h)
+    assert saved.status_code == 200, saved.text
+    review = saved.json()
+    assert not review["score_preview"]
+    assert "Enter at least 2 characters in the manager strengths narrative." in review["validation_errors"]
     response = client.post(path + "/finalize", json=command(review), headers=h)
     assert response.status_code == 422 and response.json()["error"]["code"] == "INCOMPLETE_REVIEW"
 

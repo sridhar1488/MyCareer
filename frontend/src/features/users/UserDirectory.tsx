@@ -19,7 +19,17 @@ export function UserDirectory({ ownId }: { ownId: string }) {
   function saved() { setMessage(editor?.mode === 'create' ? 'Account created. The employee must change the temporary password at first sign-in.' : 'Account changes saved.'); setEditor(null); setRevision(revision + 1); }
   if(importing)return <BulkImport onClose={()=>{setImporting(false);setRevision(revision+1);}}/>;
   if (editor) return editor.mode === 'create' || editor.mode === 'edit' ? <UserEditor key={editor.user?.id ?? 'new'} user={editor.user} onClose={() => setEditor(null)} onSaved={saved} /> : <UserActions key={`${editor.user!.id}-${editor.mode}`} user={editor.user!} mode={editor.mode} ownId={ownId} onClose={() => setEditor(null)} onSaved={saved} />;
-  return <>{message && <Feedback message={message} success />}<section className="panel"><div className="section-heading"><div><h2>User accounts</h2><p className="muted">Manage profiles and reporting relationships. Employee accounts cannot have Super Admin access.</p></div><button className="button" onClick={()=>setImporting(true)}>Import users from Excel</button><button className="button primary" onClick={() => { setMessage(''); setEditor({ mode: 'create' }); }}>Create user</button></div>
+  return <>{message && <Feedback message={message} success />}<section className="panel">
+    <div className="section-heading directory-heading">
+      <div className="directory-intro">
+        <h2>User accounts</h2>
+        <p className="muted">Manage profiles and reporting relationships. Employee accounts cannot have Super Admin access.</p>
+      </div>
+      <div className="directory-actions">
+        <button className="button" onClick={() => setImporting(true)}>Import users from Excel</button>
+        <button className="button primary" onClick={() => { setMessage(''); setEditor({ mode: 'create' }); }}>Create user</button>
+      </div>
+    </div>
     <div className="filters"><div><label htmlFor="directory-search">Search users</label><input id="directory-search" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} placeholder="Name, ID or email" /></div>
       <div><label htmlFor="filter-role">Role</label><select id="filter-role" value={role} onChange={e => { setRole(e.target.value); setPage(1); }}><option value="">All roles</option>{['EMPLOYEE', 'MANAGER', 'SUPER_ADMIN'].map(r => <option key={r}>{r}</option>)}</select></div>
       <div><label htmlFor="filter-status">Account status</label><select id="filter-status" value={active} onChange={e => { setActive(e.target.value); setPage(1); }}><option value="">All statuses</option><option value="true">Active</option><option value="false">Inactive</option></select></div>

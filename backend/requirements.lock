@@ -35,3 +35,6 @@ reportlab==5.0.1
 pillow==13.0.0
 charset-normalizer==3.5.2
 defusedxml==0.7.1
+
+# Outlook message container validation
+olefile==0.47

@@ -1,4 +1,7 @@
-type ScorePoint = { employee_id: string; employee_name: string; score: string };
+import type { components } from '../../api/schema';
+
+type ScorePoint = components['schemas']['ScorePoint'];
+type ScoreDistribution = components['schemas']['ScoreDistribution'];
 
 type Dot = ScorePoint & { x: number; y: number };
 
@@ -13,46 +16,24 @@ function xFor(score: number) {
   return left + ((score - 1) / 4) * (width - left - right);
 }
 
-function distribution(scores: number[]) {
-  const bins = Array.from({ length: 8 }, () => 0);
-  for (const score of scores) {
-    const index = Math.max(0, Math.min(7, Math.floor((score - 1) / 0.5)));
-    bins[index] += 1;
-  }
-
-  const mean = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-  const variance = scores.reduce((sum, score) => sum + (score - mean) ** 2, 0) / scores.length;
-  const deviation = Math.max(Math.sqrt(variance), 0.15);
-  const expected = (score: number) => {
-    const z = (score - mean) / deviation;
-    return (scores.length * 0.5 * Math.exp(-0.5 * z * z)) / (deviation * Math.sqrt(2 * Math.PI));
-  };
-  const peak = Math.max(...bins, ...Array.from({ length: 81 }, (_, index) => expected(1 + index * 0.05)));
-  const maximum = Math.max(4, Math.ceil((peak * 1.2) / 4) * 4);
-  const curve = Array.from({ length: 81 }, (_, index) => {
-    const score = 1 + index * 0.05;
-    const x = xFor(score);
-    const y = plotBottom - (expected(score) / maximum) * plotHeight;
-    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
-  }).join(' ');
-
-  return { bins, curve, mean, maximum };
-}
-
-export function BellCurve({ points }: { points: ScorePoint[] }) {
+export function BellCurve({ points, distribution }: { points: ScorePoint[]; distribution: ScoreDistribution | null }) {
   const validPoints = points
     .map(point => ({ ...point, value: Number(point.score) }))
     .filter(point => Number.isFinite(point.value) && point.value >= 1 && point.value <= 5);
 
-  if (!validPoints.length) {
+  if (!distribution || !validPoints.length) {
     return <section className="analytics-chart bell-curve-panel" aria-labelledby="bell-curve-heading">
       <h3 id="bell-curve-heading">Score distribution</h3>
       <p className="muted">The distribution will appear when this cycle has HR-approved evaluations.</p>
     </section>;
   }
 
-  const scores = validPoints.map(point => point.value);
-  const { bins, curve, mean, maximum } = distribution(scores);
+  const { bin_counts: bins, reference_counts: reference, mean, maximum } = distribution;
+  const curve = reference.map((count, index) => {
+    const x = xFor(1 + index * 0.05);
+    const y = plotBottom - (count / maximum) * plotHeight;
+    return `${index === 0 ? 'M' : 'L'} ${x.toFixed(1)} ${y.toFixed(1)}`;
+  }).join(' ');
   const maxLane = Math.max(...Array.from(validPoints.reduce((counts, point) => {
     const key = point.value.toFixed(1);
     counts.set(key, (counts.get(key) ?? 0) + 1);

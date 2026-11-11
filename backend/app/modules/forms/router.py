@@ -11,7 +11,7 @@ from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals.models import FormVersion
 from app.modules.audit.models import AuditEvent
-from app.modules.forms.config import config_for
+from app.modules.forms.config import config_for, stored_config
 from app.modules.forms.models import FormTemplate
 from app.modules.forms.schemas import FormCommand, FormConfig, SaveForm
 from app.modules.users.models import RoleCode
@@ -45,7 +45,7 @@ class PublishedForm(BaseModel):
 def response(item):
     return TemplateResponse(
         id=item.id,
-        config=item.config,
+        config=stored_config(item.config),
         version=item.version,
         published_form_id=item.published_form_id,
         updated_at=item.updated_at,
@@ -122,7 +122,7 @@ def publish(
 ):
     admin_transaction(db, actor)
     item = locked(db, identifier, data.expected_version)
-    config = FormConfig.model_validate(item.config)
+    config = stored_config(item.config)
     source = db.get(FormVersion, "workbook-ye2025-v1")
     definition = deepcopy(source.definition)
     definition.update(

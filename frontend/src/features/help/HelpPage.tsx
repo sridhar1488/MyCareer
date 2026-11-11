@@ -27,7 +27,7 @@ export function HelpPage() {
 
   return <div className="help-page">
     <section className="panel help-intro">
-      <div><span className="eyebrow">MYCAREER SUPPORT</span><h2>How can we help?</h2><p>Follow a role-based walkthrough or search common questions. You only see guides for the tasks your account can perform.</p></div>
+      <div><h2>How can we help?</h2><p>Find walkthroughs and answers for the tasks available to your role.</p></div>
       <label className="help-search"><span>Search help topics</span><input value={query} onChange={event => setQuery(event.target.value)} placeholder="Try: deadline, attachment, calibration" /></label>
     </section>
     {loading && <p role="status">Loading help guides…</p>}

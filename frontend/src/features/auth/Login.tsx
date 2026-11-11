@@ -4,7 +4,9 @@ import { api, type Session } from '../../api/client';
 import { Brand } from '../../components/Brand';
 import { Feedback } from '../../components/Feedback';
 
-export function Login({ onLogin, notice = '' }: { onLogin: (session: Session) => void; notice?: string }) {
+export function Login({ onLogin, notice = '', serviceError = '' }: {
+  onLogin: (session: Session) => void; notice?: string; serviceError?: string;
+}) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,7 +33,8 @@ export function Login({ onLogin, notice = '' }: { onLogin: (session: Session) =>
         <h1>Every contribution.<br />A step forward.</h1>
         <p>A space to reflect on your achievements, connect with your manager, and shape what comes next.</p>
         <div className="story-rule" /><p className="story-caption">Your performance. Your development. Our shared progress.</p>
-      </div><p className="story-footer">MedImpact International · People &amp; performance</p>
+      </div>
+      <p className="story-footer">MedImpact International · People &amp; performance</p>
     </aside>
     <main className="login-main" id="main-content"><div className="login-form-wrap">
       <div className="mobile-brand"><Brand /></div>
@@ -39,7 +42,7 @@ export function Login({ onLogin, notice = '' }: { onLogin: (session: Session) =>
       <h2>{help ? 'Reset your password' : 'Welcome back'}</h2>
       <p className="muted">{help ? 'Get help restoring access to your account.' : 'Sign in to your performance workspace.'}</p>
       {notice && <Feedback message={notice} success />}
-      {error && <Feedback message={error} />}{message && <Feedback message={message} success />}
+      {(error || serviceError) && <Feedback message={error || serviceError} />}{message && <Feedback message={message} success />}
       <form onSubmit={submit} aria-busy={busy}>
         <label htmlFor="email">Work email</label>
         <input id="email" name="email" type="email" autoComplete="username" required maxLength={254}

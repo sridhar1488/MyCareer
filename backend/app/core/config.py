@@ -33,6 +33,7 @@ class Settings(BaseSettings):
     smtp_password: SecretStr | None = None
     smtp_starttls: bool = True
     public_base_url: str | None = None
+    alternate_public_base_url: str | None = None
 
     @model_validator(mode="after")
     def validate_deployment(self):
@@ -75,4 +76,20 @@ class Settings(BaseSettings):
             or urlsplit(self.public_base_url).path not in {"", "/"}
         ):
             raise ValueError("Public app URL must be an HTTP(S) origin")
+        if self.alternate_public_base_url:
+            alternate = urlsplit(self.alternate_public_base_url)
+            if (
+                alternate.scheme not in {"http", "https"}
+                or not alternate.hostname
+                or alternate.path not in {"", "/"}
+                or alternate.query
+                or alternate.fragment
+                or alternate.username is not None
+            ):
+                raise ValueError("Alternate public app URL must be an HTTP(S) origin")
+            alternate_origin = self.alternate_public_base_url.rstrip("/")
+            if not self.public_base_url or alternate_origin == self.public_base_url.rstrip("/"):
+                raise ValueError("Set a distinct primary public app URL before configuring an alternate URL")
+            if alternate_origin not in self.allowed_origins:
+                raise ValueError("Include the alternate public app URL in MI_ALLOWED_ORIGINS")
         return self

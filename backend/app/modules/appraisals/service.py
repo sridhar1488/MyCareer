@@ -1,4 +1,7 @@
-from sqlalchemy import delete, select
+from collections import Counter
+from datetime import UTC
+
+from sqlalchemy import delete, func, select
 
 from app.api.dependencies import require_owner
 from app.core.errors import AppError
@@ -23,6 +26,15 @@ from app.modules.appraisals.schemas import (
 )
 from app.modules.audit.models import AuditEvent
 from app.modules.forms.config import config_for, validate_employee
+from app.modules.forms.text_limits import (
+    HEADER_LIMIT,
+    RESPONSE_LIMIT,
+    TEXT_MINIMUM,
+    exceeds_limit,
+    is_single_character,
+    validate_answer_lengths,
+    validate_text_change,
+)
 from app.modules.notifications.service import enqueue as enqueue_email
 from app.modules.users.models import RoleCode, User
 
@@ -186,6 +198,8 @@ def summary(db, appraisal):
         id=appraisal.id,
         cycle_id=cycle.id,
         cycle_title=cycle.title,
+        period_start=cycle.period_start,
+        period_end=cycle.period_end,
         state=appraisal.state,
         version=appraisal.version,
         manager_name=appraisal.identity_snapshot["manager_name"],
@@ -220,9 +234,18 @@ def responses(db, appraisal, lock=False):
     }
 
 
-def detail(db, appraisal):
+def detail(db, appraisal, *, include_draft_save_time=False):
     cycle = db.get(Cycle, appraisal.cycle_id)
     definition = db.get(FormVersion, appraisal.form_version_id).definition
+    last_draft_saved_at = None
+    if include_draft_save_time:
+        last_draft_saved_at = db.scalar(
+            select(func.max(AuditEvent.occurred_at)).where(
+                AuditEvent.resource_id == appraisal.id,
+                AuditEvent.actor_id == appraisal.employee_id,
+                AuditEvent.action == "appraisal.draft_saved",
+            )
+        )
     return_reason = None
     if appraisal.state == "RETURNED_FOR_REVISION":
         return_reason = db.scalar(
@@ -240,6 +263,7 @@ def detail(db, appraisal):
         )
     return AppraisalResponse(
         **summary(db, appraisal).model_dump(),
+        last_draft_saved_at=last_draft_saved_at.replace(tzinfo=UTC) if last_draft_saved_at else None,
         identity_snapshot=appraisal.identity_snapshot,
         content_revision=appraisal.content_revision,
         form_definition=definition,
@@ -251,8 +275,50 @@ def detail(db, appraisal):
     )
 
 
+def validate_item_lengths(db, appraisal, items, kind, title_limit, response_limit):
+    fields = (
+        ("description", "title", title_limit),
+        ("employee_narrative", "achievement description", response_limit),
+    )
+    over_limit = []
+    for number, item in enumerate(items, 1):
+        for field, label, limit in fields:
+            text = getattr(item, field)
+            if exceeds_limit(text, limit):
+                over_limit.append((number, field, label, limit, text))
+    if not over_limit:
+        return
+    # Allow existing over-limit values to survive saves and row reordering without allowing copies.
+    saved = db.execute(
+        select(AppraisalItem.description, AppraisalItem.employee_narrative)
+        .where(AppraisalItem.appraisal_id == appraisal.id, AppraisalItem.kind == kind)
+        .with_for_update()
+    )
+    existing = Counter((field, getattr(row, field)) for row in saved for field, _, _ in fields)
+    for number, field, label, limit, text in over_limit:
+        key = (field, text)
+        if existing[key] == 0:
+            raise AppError(
+                422,
+                f"{kind}_TEXT_LIMIT",
+                f"{kind.title()} {number} {label} must be {limit} characters or fewer.",
+            )
+        existing[key] -= 1
+
+
 def save_draft(db, appraisal, data: SelfAssessmentInput, actor):
-    validate_employee(config_for(db.get(FormVersion, appraisal.form_version_id).definition), data)
+    config = config_for(db.get(FormVersion, appraisal.form_version_id).definition)
+    validate_employee(config, data)
+    validate_item_lengths(
+        db, appraisal, data.goals, "GOAL", config.goal_title_max_length, config.goal_description_max_length
+    )
+    validate_item_lengths(db, appraisal, data.contributions, "CONTRIBUTION", HEADER_LIMIT, RESPONSE_LIMIT)
+    plan = db.get(DevelopmentPlan, appraisal.id, with_for_update=True, populate_existing=True)
+    development = data.development.model_dump(exclude={"extra_answers"})
+    for key, value in development.items():
+        validate_text_change(value, getattr(plan, key), key.replace("_", " ").capitalize())
+    validate_answer_lengths(data.development.extra_answers, plan.extra_answers or {})
+
     db.execute(delete(AppraisalItem).where(AppraisalItem.appraisal_id == appraisal.id))
     for kind, entries in [("GOAL", data.goals), ("CONTRIBUTION", data.contributions)]:
         for position, entry in enumerate(entries, start=1):
@@ -267,14 +333,14 @@ def save_draft(db, appraisal, data: SelfAssessmentInput, actor):
                     employee_narrative=entry.employee_narrative,
                 )
             )
-    plan = db.get(DevelopmentPlan, appraisal.id)
-    for key, value in data.development.model_dump().items():
+    for key, value in development.items():
         setattr(plan, key, value)
+    plan.extra_answers = data.development.extra_answers
     appraisal.started_at = appraisal.started_at or utcnow()
     appraisal.version += 1
     db.add(AuditEvent(actor_id=actor.user.id, action="appraisal.draft_saved", resource_id=appraisal.id))
     db.commit()
-    return detail(db, appraisal)
+    return detail(db, appraisal, include_draft_save_time=True)
 
 
 def submit(db, appraisal, actor):
@@ -285,7 +351,8 @@ def submit(db, appraisal, actor):
     # repeatable-read snapshot after waiting for a concurrent draft save.
     snapshot = responses(db, appraisal, lock=True)
     validation = SelfAssessmentInput(expected_version=appraisal.version, **snapshot)
-    validate_employee(config_for(db.get(FormVersion, appraisal.form_version_id).definition), validation, True)
+    config = config_for(db.get(FormVersion, appraisal.form_version_id).definition)
+    validate_employee(config, validation, True)
     if len(snapshot["goals"]) < cycle.min_goals:
         raise AppError(
             422, "INCOMPLETE_APPRAISAL", f"Complete at least {cycle.min_goals} goal(s) before submitting."
@@ -295,7 +362,25 @@ def submit(db, appraisal, actor):
             raise AppError(
                 422,
                 "INCOMPLETE_APPRAISAL",
-                "Each entered goal or contribution needs both a description and an achievement narrative.",
+                "Each entered goal or contribution needs a title and an achievement description or NA.",
+            )
+        if any(is_single_character(value) for value in item.values()):
+            raise AppError(
+                422,
+                "INCOMPLETE_APPRAISAL",
+                f"Each entered goal or contribution field needs at least {TEXT_MINIMUM} characters.",
+            )
+    if config.development_enabled:
+        missing = [
+            key.replace("_", " ")
+            for key, value in validation.development.model_dump(exclude={"extra_answers"}).items()
+            if len(value.strip()) < TEXT_MINIMUM
+        ]
+        if missing:
+            raise AppError(
+                422,
+                "INCOMPLETE_APPRAISAL",
+                f"Enter at least {TEXT_MINIMUM} characters or NA in Achievements and development for: {', '.join(missing)}.",
             )
     manager = db.get(User, appraisal.manager_id)
     if (
@@ -354,4 +439,4 @@ def submit(db, appraisal, actor):
         [manager.email] if manager else [],
     )
     db.commit()
-    return detail(db, appraisal)
+    return detail(db, appraisal, include_draft_save_time=True)

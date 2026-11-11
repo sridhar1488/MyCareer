@@ -20,6 +20,12 @@ After the manager submits a complete evaluation, it enters **HR approval queue**
 
 The manager separately releases the HR-approved result, then the employee can acknowledge receipt. Employee responses, manager submission, HR calibration history, approved evaluation, exact scores, and policy are preserved; reports do not recalculate scores. Existing manager-finalized results are carried forward as previously approved.
 
+## Cycle reminders
+
+In **HR monitoring → Cycle reminders**, select the appraisal cycle. Add the manager review and HR calibration deadlines, then choose when reminders should go out before each deadline. Scheduled reminders run for active cycles and use the employee submission deadline from Appraisal Cycles. Manager and HR deadlines are reminder targets.
+
+For a manual send, choose the stage and preview the message and intended recipient count. The default audience is people with work pending. Choose all assigned participants for a cycle-wide message for that stage. Each manager receives one email with their pending review count. MyCareer uses the deployment mail settings for both manual and scheduled reminders.
+
 ## Custom appraisal forms
 
 Open **Appraisal forms → Create form**. The builder supports:
@@ -37,7 +43,7 @@ Choose a **Published appraisal form** while creating/editing a draft cycle. Acti
 
 ## Employee evidence attachments
 
-Employees can attach up to 25 supporting documents to an appraisal (10 MB each): PDF, PNG/JPG, Word, Excel or PowerPoint. Attachments are private to the employee while in draft. After submission, the assigned manager and HR can view them; only the employee can add or remove draft attachments. Files stay in private persistent storage and are served through authenticated downloads.
+Employees can attach up to 25 supporting documents to an appraisal (10 MB each), including PDF, PNG/JPG, Word, Excel, PowerPoint and Outlook (.msg). Outlook messages are download-only. The employee confirms before removing a draft attachment. Attachments are private to the employee while in draft. After submission, the assigned manager and HR can access them. Files stay in private persistent storage and are served through authenticated downloads.
 
 ## Downloads
 

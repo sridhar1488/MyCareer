@@ -16,6 +16,7 @@ dependencies = [
   "fastapi==0.151.0", "uvicorn==0.54.0", "SQLAlchemy==2.1.5",
   "alembic==1.20.0", "pydantic==2.14.1", "pydantic-settings==2.16.0",
   "openpyxl==3.1.5", "reportlab==5.0.1", "defusedxml==0.7.1",
+  "olefile==0.47", "pillow==13.0.0",
   "PyMySQL[rsa]==1.2.3", "argon2-cffi==25.1.0", "email-validator>=2.2,<3",
 ]
 

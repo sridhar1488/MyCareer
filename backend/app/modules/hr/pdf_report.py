@@ -306,9 +306,22 @@ def render_pdf(records):
                     p(score.weighted.display),
                 ]
             )
-        scores.append(
-            [p("Overall score", "label"), p("100%"), "", "", p(result.score.overall.display, "label")]
-        )
+        calculated = result.score.calculated_overall
+        if calculated is not None:
+            scores.append([p("Calculated from ratings"), p("100%"), "", "", p(calculated.display)])
+            scores.append(
+                [
+                    p("Overall score · HR override", "label"),
+                    "",
+                    "",
+                    "",
+                    p(result.score.overall.display, "label"),
+                ]
+            )
+        else:
+            scores.append(
+                [p("Overall score", "label"), p("100%"), "", "", p(result.score.overall.display, "label")]
+            )
         story.append(
             table(scores, [215, 53, 65, 87, WIDTH - 420], commands=[("BACKGROUND", (0, -1), (-1, -1), PALE)])
         )
@@ -316,7 +329,9 @@ def render_pdf(records):
             [
                 Spacer(1, 6),
                 p(
-                    "Scores are preserved from manager approval. Exact values are used before display rounding; weighted components may not sum exactly at displayed precision.",
+                    "HR set the approved overall score separately from the weighted section scores."
+                    if calculated is not None
+                    else "Scores are preserved from manager approval. Exact values are used before display rounding; weighted components may not sum exactly at displayed precision.",
                     "small",
                 ),
             ]

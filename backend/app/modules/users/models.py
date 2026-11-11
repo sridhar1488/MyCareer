@@ -2,7 +2,7 @@ import enum
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, ForeignKey, String
+from sqlalchemy import Boolean, Date, ForeignKey, LargeBinary, String
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base, utcnow
@@ -60,6 +60,13 @@ class User(Base):
     @property
     def roles(self) -> list[str]:
         return sorted(r.role_code for r in self.role_assignments)
+
+
+class UserProfilePhoto(Base):
+    __tablename__ = "user_profile_photos"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    revision: Mapped[str] = mapped_column(String(36))
+    image: Mapped[bytes] = mapped_column(LargeBinary())
 
 
 class ReportingRelationship(Base):

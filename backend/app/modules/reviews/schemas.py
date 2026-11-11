@@ -4,8 +4,11 @@ from pydantic import BaseModel, Field, StrictBool, StrictInt
 
 from app.modules.appraisals.schemas import AppraisalResponse, EmployeeResponses
 from app.modules.auth.schemas import StrictInput
+from app.modules.forms.text_limits import TEXT_MINIMUM, ResponseText
 
 
+# Review and calibration saves validate edits against the current limit.
+# Historical evaluations still use these models when read back.
 class RatingInput(StrictInput):
     rating: StrictInt | None = Field(default=None, ge=1, le=5)
     comment: str = Field(default="", max_length=10000)
@@ -32,7 +35,7 @@ class SaveReview(ReviewCommand):
 
 
 class ReturnReview(ReviewCommand):
-    reason: str = Field(min_length=1, max_length=5000)
+    reason: ResponseText = Field(min_length=TEXT_MINIMUM)
 
 
 class ReleaseReview(ReviewCommand):
@@ -43,13 +46,13 @@ class CalibrationSave(StrictInput):
     expected_version: StrictInt = Field(ge=1)
     submitted_revision: StrictInt = Field(ge=1)
     evaluation: EvaluationInput
-    reason: str = Field(default="", max_length=2000)
+    reason: ResponseText = ""
 
 
 class CalibrationApprove(StrictInput):
     expected_version: StrictInt = Field(ge=1)
     submitted_revision: StrictInt = Field(ge=1)
-    reason: str = Field(default="", max_length=2000)
+    reason: ResponseText = ""
 
 
 class AcknowledgeInput(StrictInput):
@@ -77,6 +80,7 @@ class ScoreResult(BaseModel):
     policy_version: str
     sections: list[SectionScore]
     overall: ExactValue
+    calculated_overall: ExactValue | None = Field(default=None, exclude_if=lambda value: value is None)
 
 
 class TeamRow(BaseModel):

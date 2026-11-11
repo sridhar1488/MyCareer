@@ -1,12 +1,16 @@
 from fractions import Fraction
+from typing import Literal
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, aliased
 
 from app.api.dependencies import Identity, get_db, require_role
 from app.db.base import utcnow
 from app.modules.appraisals.models import Appraisal, Cycle
+from app.modules.audit.models import AuditEvent
+from app.modules.hr.analytics_export import analytics_workbook
+from app.modules.hr.analytics_pdf import analytics_pdf
 from app.modules.hr.schemas import (
     AnalyticsResponse,
     AnalyticsSummary,
@@ -19,8 +23,10 @@ from app.modules.hr.schemas import (
     ScorePoint,
     TopPerformer,
 )
+from app.modules.hr.score_distribution import score_distribution
 from app.modules.reviews import scoring
 from app.modules.reviews.models import Acknowledgement, FinalEvaluation, Release
+from app.modules.reviews.workflow import appraisal_stage
 from app.modules.users.models import RoleCode, User, UserRole
 
 router = APIRouter(
@@ -64,7 +70,7 @@ def analytics(
     cycle_id: str | None = None,
     actor: Identity = Depends(require_role(RoleCode.SUPER_ADMIN)),
     db: Session = Depends(get_db),
-):
+) -> AnalyticsResponse:
     """Aggregate cycle progress and HR-approved scores for HR-only charts."""
     query = (
         select(Appraisal, FinalEvaluation)
@@ -158,6 +164,39 @@ def analytics(
         departments=departments,
         top_performers=performers[:5],
         score_points=score_points,
+        distribution=score_distribution(score_points),
+    )
+
+
+@router.get("/analytics/export/{format}", response_class=Response)
+def export_analytics(
+    format: Literal["xlsx", "pdf"],
+    cycle_id: str | None = None,
+    actor: Identity = Depends(require_role(RoleCode.SUPER_ADMIN)),
+    db: Session = Depends(get_db),
+):
+    data = analytics(cycle_id, actor, db)
+    cycle = db.get(Cycle, cycle_id) if cycle_id else None
+    cycle_title = cycle.title if cycle else "Selected cycle" if cycle_id else "All cycles"
+    content = analytics_pdf(data, cycle_title) if format == "pdf" else analytics_workbook(data, cycle_title)
+    db.add(
+        AuditEvent(
+            actor_id=actor.user.id,
+            action="hr.analytics_exported",
+            resource_id=cycle.id if cycle else None,
+            details={"count": data.summary.appraisal_count, "format": format},
+        )
+    )
+    db.commit()
+    return Response(
+        content,
+        media_type="application/pdf"
+        if format == "pdf"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f'attachment; filename="hr-analytics.{format}"',
+            "Cache-Control": "private, no-store",
+        },
     )
 
 
@@ -178,11 +217,7 @@ def monitor(
     db: Session = Depends(get_db),
 ):
     employee, manager = aliased(User), aliased(User)
-    stage = case(
-        (Appraisal.state == "DRAFT", case((Appraisal.started_at.is_(None), "NOT_STARTED"), else_="DRAFT")),
-        (Acknowledgement.appraisal_id.is_not(None), "ACKNOWLEDGED"),
-        else_=Appraisal.state,
-    )
+    stage = appraisal_stage()
     now = utcnow()
     employee_pending = Appraisal.state.in_(["DRAFT", "RETURNED_FOR_REVISION"])
     overdue_condition = employee_pending & (Cycle.submission_deadline < now)

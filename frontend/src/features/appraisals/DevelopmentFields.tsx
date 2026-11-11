@@ -1,4 +1,6 @@
 import type { components } from '../../api/schema';
+import { CountedTextarea } from '../../components/CountedTextarea';
+import { appraisalResponseLimit } from '../../utils/appraisalTextLimits';
 type Development = components['schemas']['DevelopmentInput'];
 export const developmentLabels: [Exclude<keyof Development,'extra_answers'>,string][] = [
   ['business_achievements','Most important achievements and contributions to company / project success'],
@@ -8,6 +10,18 @@ export const developmentLabels: [Exclude<keyof Development,'extra_answers'>,stri
   ['development_plan','Development plan for the forthcoming year'],
   ['support_requested','Support requested to meet your development needs'],
 ];
-export function DevelopmentFields({ value, disabled, onChange, title = "IV. Achievements and development" }: { title?: string; value: Development; disabled: boolean; onChange: (value: Development) => void }) {
-  return <section className="panel appraisal-section"><h2>{title}</h2><p className="muted">Reflect on the review period and your next steps. Discuss your development needs and support with your manager.</p>{developmentLabels.map(([key,label]) => <div key={key}><label htmlFor={`development-${key}`}>{label}</label><textarea id={`development-${key}`} disabled={disabled} rows={4} maxLength={10000} value={value[key] ?? ''} onChange={e => onChange({...value,[key]:e.target.value})} /></div>)}</section>;
+export function DevelopmentFields({ value, disabled, onChange, showErrors, title = "IV. Achievements and development" }: { title?: string; value: Development; disabled: boolean; onChange: (value: Development) => void; showErrors?: boolean }) {
+  return <section className="panel appraisal-section development-fields">
+    <h2>{title}</h2>
+    <p className="muted">Reflect on the review period and your next steps. Enter a response or NA for each question before submitting.</p>
+    {developmentLabels.map(([key, label]) => {
+      const id = `development-${key}`;
+      const invalid = showErrors && !value[key]?.trim();
+      return <div key={key}>
+        <label htmlFor={id}>{label}</label>
+        {invalid && <small id={`${id}-error`} className="appraisal-field-error">Enter a response or NA.</small>}
+        <CountedTextarea id={id} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined} disabled={disabled} rows={4} maxLength={appraisalResponseLimit} value={value[key] ?? ''} onChange={e => onChange({...value,[key]:e.target.value})} />
+      </div>;
+    })}
+  </section>;
 }

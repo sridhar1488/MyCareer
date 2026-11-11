@@ -2,6 +2,7 @@
 
 import uuid
 from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from types import SimpleNamespace
 
 import pytest
@@ -142,6 +143,31 @@ def test_concurrent_saves_accept_exactly_one_version(concurrent_app):
         assert sorted(workers.map(save, range(2))) == [200, 409]
     for browser in clients:
         browser.close()
+
+
+def test_concurrent_duplicate_uploads_save_one_file(concurrent_app, tmp_path):
+    app = concurrent_app
+    app.state.settings.attachment_directory = str(tmp_path)
+    employee, appraisal = appraisal_fixture(app)
+    path = f"/api/v1/appraisals/{appraisal.id}/attachments"
+    start = Barrier(2)
+
+    with login(app, employee) as first, login(app, employee) as second:
+
+        def upload(browser, name):
+            start.wait(timeout=5)
+            return browser.post(path, content=b"%PDF-1.4\nShared evidence", headers={"X-File-Name": name})
+
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            responses = [
+                workers.submit(upload, first, "evidence.pdf"),
+                workers.submit(upload, second, "renamed.pdf"),
+            ]
+            results = sorted((response.result() for response in responses), key=lambda r: r.status_code)
+        assert [result.status_code for result in results] == [201, 409]
+        assert results[1].json()["error"]["code"] == "DUPLICATE_ATTACHMENT"
+        assert [item["id"] for item in first.get(path).json()["items"]] == [results[0].json()["id"]]
+        assert len(list(tmp_path.iterdir())) == 1
 
 
 def test_submit_reads_current_content_after_an_earlier_snapshot(concurrent_app):

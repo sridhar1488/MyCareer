@@ -4,6 +4,7 @@ from fractions import Fraction
 
 from app.core.errors import AppError
 from app.modules.forms.config import config_for, text_errors
+from app.modules.forms.text_limits import TEXT_MINIMUM, is_single_character
 from app.modules.reviews.schemas import EvaluationInput, ExactValue, ScoreResult, SectionScore
 
 POLICY_VERSION = "mi-2026-10-20-v1"
@@ -52,7 +53,9 @@ def exact(value: Fraction, places: int):
     return ExactValue(numerator=value.numerator, denominator=value.denominator, display=display)
 
 
-def validation_errors(evaluation: EvaluationInput, content, competency_count=11, definition=None):
+def validation_errors(
+    evaluation: EvaluationInput, content, competency_count=11, definition=None, *, enforce_minimum=False
+):
     errors = []
     config = config_for(definition) if definition else None
     allowed_na = {i for i, c in enumerate(config.competencies) if c.leadership} if config else {10}
@@ -69,6 +72,15 @@ def validation_errors(evaluation: EvaluationInput, content, competency_count=11,
             errors.append(f"{section.title()}: review exactly {count} submitted items.")
         for index, entry in enumerate(entries):
             label = f"{section.title()} {index + 1}"
+            if enforce_minimum:
+                if is_single_character(entry.comment):
+                    errors.append(
+                        f"{label}: enter at least {TEXT_MINIMUM} characters in the supporting comment."
+                    )
+                if is_single_character(entry.applicability_reason):
+                    errors.append(
+                        f"{label}: enter at least {TEXT_MINIMUM} characters in the applicability reason."
+                    )
             if entry.not_applicable:
                 if section != "competencies" or index not in allowed_na:
                     errors.append(f"{label}: only leadership can be marked N/A.")
@@ -85,17 +97,32 @@ def validation_errors(evaluation: EvaluationInput, content, competency_count=11,
         errors.append("Complete the manager strengths narrative.")
     if not evaluation.improvements.strip():
         errors.append("Complete the manager improvement narrative.")
+    if enforce_minimum:
+        if is_single_character(evaluation.strengths):
+            errors.append(f"Enter at least {TEXT_MINIMUM} characters in the manager strengths narrative.")
+        if is_single_character(evaluation.improvements):
+            errors.append(f"Enter at least {TEXT_MINIMUM} characters in the manager improvement narrative.")
     if config:
-        errors.extend(text_errors(config, evaluation.extra_answers, "MANAGER", True))
+        errors.extend(
+            text_errors(config, evaluation.extra_answers, "MANAGER", True, enforce_minimum=enforce_minimum)
+        )
     return errors
 
 
 def calculate(
-    evaluation: EvaluationInput, content, version=POLICY_VERSION, competency_count=11, definition=None
+    evaluation: EvaluationInput,
+    content,
+    version=POLICY_VERSION,
+    competency_count=11,
+    definition=None,
+    *,
+    enforce_minimum=False,
 ):
     rules = policy(version, definition)
     config = config_for(definition) if definition else None
-    errors = validation_errors(evaluation, content, competency_count, definition)
+    errors = validation_errors(
+        evaluation, content, competency_count, definition, enforce_minimum=enforce_minimum
+    )
     if errors:
         raise AppError(422, "INCOMPLETE_REVIEW", " ".join(errors))
     sections = []

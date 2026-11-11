@@ -142,10 +142,7 @@ def confirm(batch_id: str, request: Request, actor: Identity = Depends(csrf), db
                     "The administrator can securely share the private setup link from the completed import."
                 )
             else:
-                setup_instructions = (
-                    f"Set your password using this one-time link: {link['setup_url']}\n"
-                    f"It expires at {link['expires_at']:%d %b %Y, %H:%M} UTC and can only be used once."
-                )
+                setup_instructions = service.setup_email_instructions(link, settings)
             enqueue_email(
                 db,
                 settings,
