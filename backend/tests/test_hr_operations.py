@@ -1,7 +1,7 @@
 import asyncio
 import json
 from copy import deepcopy
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock
 
@@ -10,10 +10,12 @@ from openpyxl import load_workbook
 from sqlalchemy import select
 
 from app.core.config import Settings
+from app.db.base import utcnow
 from app.modules.appraisals.models import FormVersion
 from app.modules.forms.config import config_for
 from app.modules.forms.schemas import FormConfig
 from app.modules.imports.service import COLUMNS, FIELDS, read_file, template
+from app.modules.notifications.models import NotificationOutbox
 from app.modules.notifications.service import deliver_pending
 from app.modules.users.models import UserRole
 from tests.test_directory_appraisals import cycle_body, draft, headers, profile
@@ -649,6 +651,16 @@ def test_confirmed_import_sends_each_employee_their_setup_link(
         "MI_SMTP_HOST=smtp.example.org\nMI_MAIL_FROM_ADDRESS=mycareer@example.org\n",
         encoding="utf-8",
     )
+    for name in (
+        "MI_MAIL_ENABLED",
+        "MI_MAIL_TEST_MODE",
+        "MI_PUBLIC_BASE_URL",
+        "MI_ALTERNATE_PUBLIC_BASE_URL",
+        "MI_ALLOWED_ORIGINS",
+        "MI_SMTP_HOST",
+        "MI_MAIL_FROM_ADDRESS",
+    ):
+        monkeypatch.delenv(name, raising=False)
     settings = Settings(
         _env_file=env_file,
         environment="test",
@@ -667,6 +679,12 @@ def test_confirmed_import_sends_each_employee_their_setup_link(
     links = {link["email"]: link["setup_url"] for link in confirmed.json()["setup_links"]}
     assert set(links) == {row["email"] for row in rows}
 
+    with factory.begin() as db:
+        queued = db.scalars(select(NotificationOutbox)).all()
+        assert len(queued) == 2
+        # MySQL DATETIME rounds to seconds, so make the queued messages unambiguously due.
+        for item in queued:
+            item.available_at = utcnow() - timedelta(seconds=2)
     asyncio.run(deliver_pending(factory, settings))
     messages = [call.args[0] for call in smtp.send_message.call_args_list]
     assert len(messages) == 2

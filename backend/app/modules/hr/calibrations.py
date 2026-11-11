@@ -334,7 +334,7 @@ def save_overall_score(
     override = scoring.exact(Fraction(data.score), 1) if data.score is not None else None
     if override == existing_override(draft):
         return
-    action = "OVERALL_OVERRIDDEN" if override else "OVERALL_OVERRIDE_CLEARED"
+    action = "OVERALL_OVERRIDDEN" if override else "OVERRIDE_CLEARED"
     save_calibration(
         db,
         appraisal,
