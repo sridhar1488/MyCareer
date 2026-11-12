@@ -141,10 +141,7 @@ def change_password(
 @router.post("/forgot-password", status_code=202)
 def forgot_password(data: ResetRequest, request: Request, db: Session = Depends(get_db)) -> dict[str, str]:
     limit(request, "reset_request", str(data.email).lower())
-    # No public token issuance or false promise of email delivery.
-    db.add(AuditEvent(action="auth.reset_requested", details={"channel": "administrator_assistance"}))
-    db.commit()
-    return {"message": "Contact your account administrator for a secure password reset link."}
+    return {"message": service.request_password_reset(db, request.app.state.settings, str(data.email))}
 
 
 @router.post("/complete-password-setup", status_code=204)

@@ -78,7 +78,7 @@ Use **User directory > Reset password** for another active account. It invalidat
 .venv/Scripts/python.exe -m app.cli issue-reset --email ACCOUNT_OWNER_EMAIL
 ```
 
-Treat the printed link as a credential and hand it off privately. The browser removes the token fragment immediately; completion checks expiry/one-use status. Public reset requests consistently direct known/unknown accounts to administrator assistance. Email transport is not configured.
+Treat the printed link as a credential and hand it off privately. The browser removes the token fragment immediately. Completion checks expiry and one-use status. Forgot password verifies the registered account and queues a reset email when mail is enabled. Unknown addresses receive a message to contact the administrator. Reset links expire after `MI_RESET_MINUTES` (30 minutes by default). In mail test mode, a usable reset link is included only for the account whose email matches `MI_MAIL_TEST_RECIPIENT`. Other accounts produce previews without usable links.
 
 Configurable technical defaults: eight-hour absolute sessions, thirty-minute idle timeout/reset-link expiry, ten attempts per principal per fifteen-minute window, IP ceiling five times that limit, and separate durable counters per auth operation. Production security policy D17 remains open. New passwords allow spaces/Unicode and must contain 8–15 characters; changes/resets must differ from the previous password. Existing longer passwords remain usable for sign-in. Argon2id uses 64 MiB, three iterations and two lanes.
 

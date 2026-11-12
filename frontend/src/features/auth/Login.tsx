@@ -40,7 +40,7 @@ export function Login({ onLogin, notice = '', serviceError = '' }: {
       <div className="mobile-brand"><Brand /></div>
       <p className="eyebrow">MYCAREER</p>
       <h2>{help ? 'Reset your password' : 'Welcome back'}</h2>
-      <p className="muted">{help ? 'Get help restoring access to your account.' : 'Sign in to your performance workspace.'}</p>
+      <p className="muted">{help ? 'Enter your registered work email to receive a password reset link.' : 'Sign in to your performance workspace.'}</p>
       {notice && <Feedback message={notice} success />}
       {(error || serviceError) && <Feedback message={error || serviceError} />}{message && <Feedback message={message} success />}
       <form onSubmit={submit} aria-busy={busy}>
@@ -57,11 +57,11 @@ export function Login({ onLogin, notice = '', serviceError = '' }: {
                 : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></svg>}
             </button>
           </div></>}
-        <button className="button primary full-width" type="submit" disabled={busy}>{busy ? 'Please wait…' : help ? 'Request reset assistance' : 'Sign in'}<span aria-hidden="true"> →</span></button>
+        <button className="button primary full-width" type="submit" disabled={busy}>{busy ? 'Please wait…' : help ? 'Send reset link' : 'Sign in'}<span aria-hidden="true"> →</span></button>
       </form>
       <button className="text-button" type="button" onClick={() => { setHelp(!help); setError(''); setMessage(''); setPassword(''); }}>
         {help ? 'Back to sign in' : 'Forgot your password?'}</button>
-      <div className="access-note"><span aria-hidden="true">◈</span><p>Use your organization account. For account access or a secure reset link, contact your administrator.</p></div>
+      <div className="access-note"><span aria-hidden="true">◈</span><p>Use your registered organization account. If your account is not registered or you need help accessing it, contact your administrator.</p></div>
     </div><footer>MyCareer <span>Make progress, together.</span></footer></main>
   </div>;
 }

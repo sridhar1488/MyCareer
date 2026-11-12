@@ -20,7 +20,7 @@ In paths below, `{id}` is a server-issued resource ID. “Owner” includes ever
 | GET /auth/me | Safe profile, effective functions, mandatory password-change state | Authenticated |
 | GET /auth/csrf | Session-bound CSRF material | Session context |
 | POST /auth/change-password | Verify current credential, update hash, revoke other sessions | Authenticated; allowed for restricted first-login session |
-| POST /auth/forgot-password | Generic response, queue secure reset where configured | Public, rate-limited |
+| POST /auth/forgot-password | Email a one-time reset link to a registered active user. Unknown addresses return 404 with guidance to contact the administrator. Mail-disabled deployments return 503. In test mode, usable links are sent only when the registered email matches the configured test recipient. | Public, rate-limited |
 | POST /auth/complete-password-setup | Consume SETUP/RESET token, set password, invalidate sessions | One-use token, rate-limited |
 | GET /users | Search/filter/sort/paginate directory | SUPER_ADMIN |
 | POST /users | Create profile, account and initial password setup | SUPER_ADMIN |

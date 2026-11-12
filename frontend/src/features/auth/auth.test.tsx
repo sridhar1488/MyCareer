@@ -20,15 +20,15 @@ describe('Authentication forms', () => {
     expect(fetch).toHaveBeenCalledOnce();
   });
 
-  it('provides reset assistance without requesting a password', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({ message: 'Contact your account administrator.' }) }));
+  it('requests a reset email without requesting a password', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, status: 202, json: async () => ({ message: 'A password reset link has been queued for your registered email.' }) }));
     const user = userEvent.setup();
     render(<Login onLogin={vi.fn()} />);
     await user.click(screen.getByRole('button', { name: 'Forgot your password?' }));
     expect(screen.queryByLabelText('Password')).not.toBeInTheDocument();
     await user.type(screen.getByLabelText('Work email'), 'member@example.org');
-    await user.click(screen.getByRole('button', { name: 'Request reset assistance' }));
-    expect(await screen.findByRole('status')).toHaveTextContent('Contact your account administrator.');
+    await user.click(screen.getByRole('button', { name: 'Send reset link' }));
+    expect(await screen.findByRole('status')).toHaveTextContent('A password reset link has been queued for your registered email.');
   });
 
   it('lets the user reveal and hide the sign-in password', async () => {

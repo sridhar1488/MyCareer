@@ -1,4 +1,7 @@
+import asyncio
+import re
 from datetime import timedelta
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy import select, update
@@ -8,6 +11,8 @@ from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import AuthSession, Credential, PasswordToken
 from app.modules.auth.service import issue_reset
+from app.modules.notifications.models import NotificationOutbox
+from app.modules.notifications.service import deliver_pending
 from app.modules.users.models import User
 from tests.conftest import PASSWORD
 
@@ -208,13 +213,93 @@ def test_reset_expiry_and_superseded_token(client, factory, app, user_factory):
         )
 
 
-def test_public_reset_is_generic_and_never_returns_a_token(client, user_factory):
+@pytest.mark.parametrize("alternate", [None, "https://mycareer-vpn.example.org"])
+@pytest.mark.parametrize("test_mode", [False, True])
+def test_public_reset_emails_registered_user_and_completes_once(
+    client,
+    user_factory,
+    signin,
+    factory,
+    monkeypatch,
+    alternate,
+    test_mode,
+):
+    monkeypatch.setattr("app.main.deliver_pending", AsyncMock())
+    settings = client.app.state.settings
+    settings.mail_enabled = True
+    settings.mail_test_mode = test_mode
+    settings.mail_test_recipient = "reset.member@example.org"
+    settings.smtp_host = "smtp.example.org"
+    settings.mail_from_address = "mycareer@example.org"
+    settings.public_base_url = "https://mycareer.example.org"
+    settings.alternate_public_base_url = alternate
+    smtp = MagicMock()
+    smtp_class = MagicMock()
+    smtp_class.return_value.__enter__.return_value = smtp
+    monkeypatch.setattr("app.modules.notifications.service.smtplib.SMTP", smtp_class)
+    user = user_factory(email="reset.member@example.org")
+    signin(user)
+    response = client.post("/api/v1/auth/forgot-password", json={"email": user.email.upper()})
+    assert response.status_code == 202, response.text
+    assert set(response.json()) == {"message"}
+    assert client.get("/api/v1/auth/me").status_code == 200
+    with factory.begin() as db:
+        queued = db.scalars(select(NotificationOutbox)).all()
+        assert len(queued) == 1
+        assert queued[0].recipients == [user.email]
+        raw = re.search(r"/#reset=([A-Za-z0-9_-]+)", queued[0].body).group(1)
+        saved = db.scalar(select(PasswordToken).where(PasswordToken.user_id == user.id))
+        assert saved.token_hash == token_hash(raw) and saved.token_hash != raw
+        assert 0 < (saved.expires_at - utcnow()).total_seconds() <= settings.reset_minutes * 60 + 1
+        assert raw not in response.text
+        queued[0].available_at = utcnow() - timedelta(seconds=2)
+    asyncio.run(deliver_pending(factory, settings))
+    smtp.send_message.assert_called_once()
+    message = smtp.send_message.call_args.args[0]
+    assert str(message["To"]) == user.email
+    assert f"https://mycareer.example.org/#reset={raw}" in message.get_content()
+    if alternate:
+        assert f"{alternate}/#reset={raw}" in message.get_content()
+    body = {"token": raw, "new_password": NEW_PASSWORD}
+    assert client.post("/api/v1/auth/complete-password-setup", json=body).status_code == 204
+    assert client.get("/api/v1/auth/me").status_code == 401
+    assert client.post("/api/v1/auth/complete-password-setup", json=body).status_code == 400
+    assert (
+        client.post("/api/v1/auth/login", json={"email": user.email, "password": NEW_PASSWORD}).status_code
+        == 200
+    )
+
+
+def test_public_reset_rejects_unknown_inactive_and_disabled_email(client, user_factory, factory):
+    path = "/api/v1/auth/forgot-password"
+    unknown = client.post(path, json={"email": "unknown@example.org"})
+    assert unknown.status_code == 404
+    assert unknown.json()["error"]["message"] == "User is not registered. Please contact your administrator."
+    inactive = user_factory(active=False)
+    assert client.post(path, json={"email": inactive.email}).status_code == 403
     user = user_factory()
-    a = client.post("/api/v1/auth/forgot-password", json={"email": user.email})
-    b = client.post("/api/v1/auth/forgot-password", json={"email": "unknown@example.org"})
-    assert a.status_code == b.status_code == 202
-    assert a.json() == b.json()
-    assert set(a.json()) == {"message"}
+    unavailable = client.post(path, json={"email": user.email})
+    assert unavailable.status_code == 503
+    assert unavailable.json()["error"]["code"] == "MAIL_UNAVAILABLE"
+    with factory() as db:
+        assert db.scalar(select(PasswordToken)) is None
+        assert db.scalar(select(NotificationOutbox)) is None
+
+
+def test_public_reset_test_mail_omits_usable_links(client, user_factory, factory, monkeypatch):
+    monkeypatch.setattr("app.main.deliver_pending", AsyncMock())
+    settings = client.app.state.settings
+    settings.mail_enabled = settings.mail_test_mode = True
+    settings.mail_test_recipient = "qa@example.org"
+    user = user_factory()
+    response = client.post("/api/v1/auth/forgot-password", json={"email": user.email})
+    assert response.status_code == 202
+    assert "test mode" in response.json()["message"]
+    with factory() as db:
+        queued = db.scalar(select(NotificationOutbox))
+        assert queued.recipients == ["qa@example.org"]
+        assert "#reset=" not in queued.body
+        assert db.scalar(select(PasswordToken)) is None
 
 
 def test_shared_rate_limit_persists_across_app_instances(client, app, factory):

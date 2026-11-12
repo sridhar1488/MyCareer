@@ -133,7 +133,7 @@ test('reset link is consumed once and removed from the address bar', async ({ pa
 
 test('sign-in keeps its original content in view on desktop and mobile', async ({ page }) => {
   await page.goto('/');
-  const accessNote = page.getByText('Use your organization account.', { exact: false });
+  const accessNote = page.getByText('Use your registered organization account.', { exact: false });
   const formFooter = page.getByText('Make progress, together.', { exact: true });
   async function expectLoginFits() {
     await expect(page.getByRole('button', { name: 'Sign in', exact: true })).toBeInViewport({ ratio: 1 });
@@ -159,6 +159,6 @@ test('sign-in keeps its original content in view on desktop and mobile', async (
   await expect(page.getByRole('alert')).toHaveText('Email or password is incorrect.');
   await expectLoginFits();
   await page.getByRole('button', { name: 'Forgot your password?' }).click();
-  await page.getByRole('button', { name: 'Request reset assistance' }).click();
-  await expect(page.getByRole('status')).toContainText('Contact your account administrator');
+  await page.getByRole('button', { name: 'Send reset link' }).click();
+  await expect(page.getByRole('alert')).toHaveText('User is not registered. Please contact your administrator.');
 });

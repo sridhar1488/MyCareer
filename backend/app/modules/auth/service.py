@@ -11,6 +11,7 @@ from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
 from app.modules.auth.models import AuthSession, Credential, PasswordToken
 from app.modules.auth.schemas import UserResponse
+from app.modules.notifications.service import enqueue
 from app.modules.users.models import User, UserProfilePhoto
 
 
@@ -111,8 +112,48 @@ def change_password(db: Session, settings: Settings, actor, current_password: st
     return raw, csrf_token, profile(db, user, credential)
 
 
+def request_password_reset(db: Session, settings: Settings, email: str) -> str:
+    user = db.scalar(select(User).where(User.email == email.lower()).with_for_update())
+    if user is None:
+        raise AppError(
+            404, "USER_NOT_REGISTERED", "User is not registered. Please contact your administrator."
+        )
+    if not user.active:
+        raise AppError(
+            403, "ACCOUNT_INACTIVE", "Your account is inactive. Please contact your administrator."
+        )
+    if not settings.mail_enabled:
+        raise AppError(
+            503, "MAIL_UNAVAILABLE", "Password reset email is unavailable. Please contact your administrator."
+        )
+
+    expires = utcnow() + timedelta(minutes=settings.reset_minutes)
+    preview_only = (
+        settings.mail_test_mode and user.email.casefold() != (settings.mail_test_recipient or "").casefold()
+    )
+    instructions = f"Hi {user.full_name},\n\nWe received a request to reset your MyCareer password.\n\n"
+    if preview_only:
+        instructions += "Password reset email preview. Reset links are omitted in test mode.\n\n"
+    else:
+        raw = opaque_token()
+        db.add(PasswordToken(user_id=user.id, token_hash=token_hash(raw), expires_at=expires))
+        instructions += f"Reset your password: {settings.public_base_url.rstrip('/')}/#reset={raw}\n"
+        if settings.alternate_public_base_url:
+            instructions += (
+                f"Alternate reset link: {settings.alternate_public_base_url.rstrip('/')}/#reset={raw}\n"
+            )
+        instructions += f"\nThis link expires at {expires:%d %b %Y, %H:%M} UTC and can only be used once.\n\n"
+    instructions += "If you did not request this, you can ignore this email."
+    enqueue(db, settings, "Reset your MyCareer password", instructions, [user.email])
+    db.add(AuditEvent(action="auth.reset_requested", resource_id=user.id, details={"channel": "email"}))
+    db.commit()
+    if preview_only:
+        return "Password reset email is in test mode. Please contact your administrator for a reset link."
+    return "A password reset link has been queued for your registered email. Please check your inbox."
+
+
 def issue_reset(db: Session, settings: Settings, user: User):
-    """Local operator command only until an approved delivery transport is configured."""
+    """Issue a password reset through the local administrator command."""
     user = db.scalar(
         select(User).where(User.id == user.id).with_for_update().execution_options(populate_existing=True)
     )
