@@ -1,6 +1,7 @@
 from sqlalchemy import select
 
 from app.api.dependencies import require_assigned_manager
+from app.core.dates import format_ist
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals import service as employee_service
@@ -148,6 +149,16 @@ def detail(db, appraisal):
     )
     if final:
         evaluation = final.evaluation
+    prior_submission = (
+        db.scalar(
+            select(AppraisalRevision).where(
+                AppraisalRevision.appraisal_id == appraisal.id,
+                AppraisalRevision.revision == appraisal.content_revision - 1,
+            )
+        )
+        if appraisal.content_revision > 1
+        else None
+    )
     return ReviewResponse(
         appraisal=personal,
         submitted_revision=appraisal.content_revision,
@@ -158,6 +169,14 @@ def detail(db, appraisal):
         policy=rules,
         validation_errors=errors,
         score_preview=preview,
+        previous_submitted_revision=prior_submission.revision if prior_submission else None,
+        previous_employee_responses=prior_submission.response_snapshot if prior_submission else None,
+        previous_manager_draft=draft.evaluation
+        if prior_submission
+        and draft
+        and draft.submitted_revision == prior_submission.revision
+        and appraisal.state in REVIEWABLE
+        else None,
     )
 
 
@@ -180,6 +199,12 @@ def transition(db, appraisal, actor, state, reason=None):
 
 def ensure_reviewable(appraisal):
     if appraisal.state not in REVIEWABLE:
+        if appraisal.state in {"HR_REVIEW", "HR_APPROVED", "FINALIZED", "RELEASED"}:
+            raise AppError(
+                409,
+                "REVIEW_FINALIZED",
+                "This manager review has been submitted to HR and is locked. Ratings and comments can no longer be edited here.",
+            )
         raise AppError(409, "INVALID_TRANSITION", "Only a submitted appraisal can be reviewed or returned.")
 
 
@@ -284,7 +309,7 @@ def return_for_revision(db, appraisal, data, actor):
     cycle = db.get(Cycle, appraisal.cycle_id)
     settings = db.info.get("settings")
     base_url = settings.public_base_url if settings and settings.public_base_url else "MyCareer"
-    deadline = f"{cycle.submission_deadline:%d %b %Y, %H:%M} UTC"
+    deadline = format_ist(cycle.submission_deadline)
     late_policy = (
         "Late submissions are allowed."
         if cycle.allow_late_submission

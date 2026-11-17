@@ -1,4 +1,4 @@
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from sqlalchemy import select
@@ -29,9 +29,8 @@ def test_directory_setup_link_email_modes_and_seven_day_expiry(client, signin, u
     test_link = response.json()
     assert test_link["email_status"] == "test_only"
     assert "#reset=" in test_link["setup_url"]
-    expires_at = utcnow().fromisoformat(test_link["expires_at"].replace("Z", "+00:00"))
-    if expires_at.tzinfo:
-        expires_at = expires_at.replace(tzinfo=None)
+    assert test_link["expires_at"].endswith("+05:30")
+    expires_at = datetime.fromisoformat(test_link["expires_at"]).astimezone(UTC).replace(tzinfo=None)
     assert timedelta(days=6, hours=23) < expires_at - utcnow() <= timedelta(days=7)
     with factory() as db:
         messages = db.scalars(select(NotificationOutbox).order_by(NotificationOutbox.created_at)).all()
@@ -53,11 +52,13 @@ def test_directory_setup_link_email_modes_and_seven_day_expiry(client, signin, u
     live_link = response.json()
     assert live_link["email_status"] == "queued"
     with factory() as db:
-        messages = db.scalars(select(NotificationOutbox).order_by(NotificationOutbox.created_at)).all()
+        messages = db.scalars(select(NotificationOutbox)).all()
         assert len(messages) == 2
-        assert messages[1].recipients == [employee.email]
-        assert live_link["setup_url"] in messages[1].body
-        assert messages[1].sent_at is None
+        # MySQL timestamps can tie when both messages are enqueued in the same second.
+        live_messages = [message for message in messages if message.recipients == [employee.email]]
+        assert len(live_messages) == 1
+        assert live_link["setup_url"] in live_messages[0].body
+        assert live_messages[0].sent_at is None
 
 
 def test_pdf_and_image_previews_share_employee_manager_and_hr_access(
@@ -128,6 +129,9 @@ def test_outlook_attachment_validation_and_download_only_access(
     # A synthetic compound file with a top-level Outlook property stream.
     content = (Path(__file__).parent / "fixtures" / "synthetic-outlook.msg").read_bytes()
     upload_headers = {**employee_headers, "X-File-Name": "evidence.MSG"}
+    empty = client.post(attachments, content=b"", headers=upload_headers)
+    assert empty.status_code == 422
+    assert empty.json()["error"]["code"] == "EMPTY_FILE"
     unrelated_container = content.replace(
         "__properties_version1.0".encode("utf-16-le"), "__unrelated__version1.0".encode("utf-16-le")
     )
@@ -143,6 +147,7 @@ def test_outlook_attachment_validation_and_download_only_access(
     item = uploaded.json()
     assert item["name"] == "evidence.MSG"
     assert item["media_type"] == "application/vnd.ms-outlook"
+    assert item["uploaded_at"].endswith("+05:30")
     url = f"{attachments}/{item['id']}"
     for person in [manager, admin]:
         headers(signin, person)
@@ -170,6 +175,23 @@ def test_outlook_attachment_validation_and_download_only_access(
         assert download.content == content
     headers(signin, user_factory())
     assert client.get(url).status_code == 404
+    manager_headers = headers(signin, manager)
+    review_url = f"/api/v1/manager/appraisals/{appraisal['id']}"
+    review = client.get(review_url).json()
+    returned = client.post(
+        f"{review_url}/return",
+        json={
+            "expected_version": review["appraisal"]["version"],
+            "submitted_revision": 1,
+            "reason": "Add updated evidence",
+        },
+        headers=manager_headers,
+    )
+    assert returned.status_code == 200, returned.text
+    rejected = client.delete(url, headers=headers(signin, employee))
+    assert rejected.status_code == 409
+    assert rejected.json()["error"]["code"] == "ATTACHMENT_READ_ONLY"
+    assert client.get(url).content == content
 
 
 def test_attachment_duplicates_match_content_within_one_appraisal(client, signin, setup_appraisal, tmp_path):

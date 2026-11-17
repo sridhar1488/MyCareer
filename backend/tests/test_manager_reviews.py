@@ -141,6 +141,8 @@ def test_return_reason_resubmit_resets_draft_and_preserves_history(client, signi
     eh = headers(signin, employee)
     ownpath = f"/api/v1/appraisals/{identifier}"
     own = client.get(ownpath).json()
+    assert own["return_reason"] == "Please clarify the result"
+    assert client.get("/api/v1/me/appraisals").json()["items"][0]["return_reason"] == own["return_reason"]
     updated = client.put(ownpath + "/self-assessment", json=draft(own["version"], count=2), headers=eh).json()
     mh = headers(signin, manager)
     visible = client.get(path).json()
@@ -158,7 +160,17 @@ def test_return_reason_resubmit_resets_draft_and_preserves_history(client, signi
     current = client.get(path).json()
     assert current["submitted_revision"] == 2 and not current["draft_is_current"]
     assert len(current["evaluation"]["goals"]) == 2
-    assert client.get(path + "/review-history").json()["total"] == 1
+    assert current["previous_submitted_revision"] == 1
+    assert current["previous_employee_responses"] == review["employee_responses"]
+    assert current["previous_manager_draft"] == saved["evaluation"]
+    history = client.get(path + "/review-history?page_size=1").json()
+    assert history["total"] == 2
+    assert history["items"][0]["action"] == "RETURNED_FOR_REVISION"
+    assert history["items"][0]["reason"] == "Please clarify the result"
+    assert history["items"][0]["submitted_revision"] == 1
+    assert history["items"][0]["evaluation"] is None
+    earlier = client.get(path + "/review-history?page_size=1&page=2").json()
+    assert earlier["items"][0]["action"] == "DRAFT_SAVED"
     stale = save_body(current)
     stale["submitted_revision"] = 1
     assert client.put(path + "/review", json=stale, headers=mh).status_code == 409

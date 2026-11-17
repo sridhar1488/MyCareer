@@ -145,6 +145,8 @@ def test_approved_report_access_and_own_privacy(client, signin, submitted_review
     response = client.get(f"/api/v1/hr/evaluations/{identifier}")
     assert response.status_code == 200, response.text
     assert response.json()["score"] == expected
+    assert response.json()["finalized_at"].endswith("+05:30")
+    approved_at = datetime.fromisoformat(response.json()["finalized_at"]).replace(tzinfo=None)
     assert client.get("/api/v1/hr/evaluations").json()["total"] == 1
     excel = client.get("/api/v1/hr/evaluations/export/xlsx")
     assert excel.status_code == 200, excel.text[:200]
@@ -156,10 +158,12 @@ def test_approved_report_access_and_own_privacy(client, signin, submitted_review
         "Department",
         "Manager",
         "Status",
-        "Approved Date",
+        "Approved at (IST)",
         "Overall / 5",
     ]
     assert book["Evaluations"]["H2"].value == 3.8
+    assert book["Evaluations"]["G2"].is_date
+    assert abs((book["Evaluations"]["G2"].value - approved_at).total_seconds()) < 0.001
     assert book["Evaluations"].auto_filter.ref == "A1:H2"
     assert book["Responses"].max_row > 10
     assert client.get("/api/v1/hr/evaluations/export/pdf").content.startswith(b"%PDF")
@@ -324,7 +328,7 @@ def test_calibration_grid_export_and_overall_override(client, signin, submitted_
         "Manager score / 5",
         "Calibrated score / 5",
         "Approval status",
-        "Manager submitted (UTC)",
+        "Manager submitted (IST)",
     ]
     assert grid["A2"].value == employee.employee_id and grid["A2"].data_type == "s"
     assert grid["B2"].value == row["employee_name"]
@@ -337,6 +341,7 @@ def test_calibration_grid_export_and_overall_override(client, signin, submitted_
     ]
     assert [grid[f"{c}2"].value for c in "HI"] == [3.8, 4.2]
     assert grid["J2"].value == "Waiting for HR approval"
+    assert row["manager_submitted_at"].endswith("+05:30")
     submitted_at = datetime.fromisoformat(row["manager_submitted_at"]).replace(tzinfo=None)
     assert grid["K2"].is_date and abs((grid["K2"].value - submitted_at).total_seconds()) < 0.001
     assert grid.auto_filter.ref == "A1:K2"

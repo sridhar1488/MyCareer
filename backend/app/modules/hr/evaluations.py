@@ -3,6 +3,7 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, get_db, require_role
+from app.core.dates import as_ist
 from app.core.errors import AppError
 from app.modules.appraisals.models import Appraisal, Cycle
 from app.modules.audit.models import AuditEvent
@@ -72,7 +73,7 @@ def listing(
                 "cycle": c.title,
                 "identity": a.identity_snapshot,
                 "state": a.state,
-                "finalized_at": db.get(FinalEvaluation, a.id).finalized_at,
+                "finalized_at": as_ist(db.get(FinalEvaluation, a.id).finalized_at),
             }
             for a, c in values[(page - 1) * page_size : page * page_size]
         ],

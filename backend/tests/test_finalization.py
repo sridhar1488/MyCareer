@@ -87,7 +87,10 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
         ("/return", client.post, command(review, reason="Override")),
         ("/finalize", client.post, command(review)),
     ]:
-        assert method(path + suffix, json=body, headers=h).status_code == 409
+        rejected = method(path + suffix, json=body, headers=h)
+        assert rejected.status_code == 409
+        if suffix == "/review":
+            assert rejected.json()["error"]["code"] == "REVIEW_FINALIZED"
     assert (
         client.post(
             path + "/release", json={**command(review), "review_meeting_confirmed": True}, headers=h

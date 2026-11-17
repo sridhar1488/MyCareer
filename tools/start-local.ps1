@@ -11,7 +11,7 @@ foreach ($port in @(8000, 5173)) {
         throw "Port $port is already in use. Stop that process before starting this workspace."
     }
 }
-$apiProcess = Start-Process -FilePath $pythonPath -ArgumentList '-m','uvicorn','app.main:create_app','--factory','--host','127.0.0.1','--port','8000','--no-proxy-headers' -WorkingDirectory (Join-Path $workspacePath 'backend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $localPath 'api.out.log') -RedirectStandardError (Join-Path $localPath 'api.err.log') -PassThru
+$apiProcess = Start-Process -FilePath $pythonPath -ArgumentList '-m','uvicorn','app.main:create_app','--factory','--host','127.0.0.1','--port','8000','--no-proxy-headers','--no-server-header' -WorkingDirectory (Join-Path $workspacePath 'backend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $localPath 'api.out.log') -RedirectStandardError (Join-Path $localPath 'api.err.log') -PassThru
 $vitePath = Join-Path $workspacePath 'frontend\node_modules\vite\bin\vite.js'
 $webProcess = Start-Process -FilePath $nodePath -ArgumentList "`"$vitePath`"",'--host','127.0.0.1' -WorkingDirectory (Join-Path $workspacePath 'frontend') -WindowStyle Hidden -RedirectStandardOutput (Join-Path $localPath 'web.out.log') -RedirectStandardError (Join-Path $localPath 'web.err.log') -PassThru
 @(

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session, aliased
 from starlette.concurrency import run_in_threadpool
 
 from app.api.dependencies import Identity, active_identity, csrf, get_db, require_role
+from app.core.dates import as_ist
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals import service
@@ -184,7 +185,7 @@ def attachment_row(item):
         "name": item.original_name,
         "media_type": item.media_type,
         "size": item.byte_size,
-        "uploaded_at": item.uploaded_at,
+        "uploaded_at": as_ist(item.uploaded_at),
         "submitted_revision": item.submitted_revision,
     }
 
@@ -229,6 +230,8 @@ async def upload_attachment(
         data.extend(chunk)
         if len(data) > ATTACHMENT_LIMIT:
             raise AppError(413, "FILE_TOO_LARGE", "Each attachment must be 10 MB or smaller.")
+    if not data:
+        raise AppError(422, "EMPTY_FILE", "The file is empty. Choose a file with content.")
     valid = (
         (ext == ".pdf" and data.startswith(b"%PDF-"))
         or (ext == ".png" and data.startswith(b"\x89PNG\r\n\x1a\n"))
@@ -318,13 +321,18 @@ def delete_attachment(
         .where(
             AppraisalAttachment.id == attachment_id,
             AppraisalAttachment.appraisal_id == appraisal_id,
-            AppraisalAttachment.submitted_revision.is_(None),
             AppraisalAttachment.deleted_at.is_(None),
         )
         .with_for_update()
     )
     if not item:
         raise AppError(404, "NOT_FOUND", "Draft attachment not found.")
+    if item.submitted_revision is not None:
+        raise AppError(
+            409,
+            "ATTACHMENT_READ_ONLY",
+            "Submitted evidence is preserved in history and cannot be removed. Add a corrected file and identify the evidence it replaces.",
+        )
     item.deleted_at = utcnow()
     db.add(
         AuditEvent(actor_id=actor.user.id, action="appraisal.attachment_removed", resource_id=appraisal.id)

@@ -1,6 +1,5 @@
 """Branded, paginated report layout for preserved final evaluations."""
 
-from datetime import UTC, datetime
 from html import escape
 from io import BytesIO
 from pathlib import Path
@@ -21,6 +20,8 @@ from reportlab.platypus import (
     TableStyle,
 )
 
+from app.core.dates import format_ist
+from app.db.base import utcnow
 from app.modules.forms.config import config_for
 
 ASSETS = Path(__file__).with_name("assets")
@@ -57,7 +58,7 @@ DEVELOPMENT_LABELS = {
 
 def render_pdf(records):
     stream = BytesIO()
-    generated = datetime.now(UTC).strftime("%d %b %Y, %H:%M UTC")
+    generated = format_ist(utcnow())
     body = ParagraphStyle(
         "Report body",
         fontName="LeapMetrics",
@@ -133,7 +134,7 @@ def render_pdf(records):
         return Paragraph(escape(text).replace("\n", "<br/>"), styles[style])
 
     def date(value):
-        return value.strftime("%d %b %Y, %H:%M UTC") if value else "Pending"
+        return format_ist(value) if value else "Pending"
 
     def table(rows, widths=None, header=True, commands=()):
         widths = widths or [WIDTH]

@@ -3,6 +3,7 @@ import { api, type User } from '../../api/client';
 import { ProfileAvatar } from '../../app/WorkspaceHeader';
 import { Feedback } from '../../components/Feedback';
 import { calendarDate } from '../../utils/dates';
+import { profileCountry } from '../../utils/profileCountry';
 
 export function MyProfile({ user, onChange }: { user: User; onChange: (user: User) => void }) {
   const [busy, setBusy] = useState(false);
@@ -49,7 +50,7 @@ export function MyProfile({ user, onChange }: { user: User; onChange: (user: Use
       ['Work email', user.email],
       ['Department', user.department || 'Not provided'],
       ['Designation', user.designation || 'Not provided'],
-      ['Country', user.country?.trim() || 'India'],
+      ['Country', profileCountry(user) || 'Not provided'],
       ['Joining date', user.date_joined ? calendarDate(user.date_joined) : 'Not provided'],
       ['Current reporting manager', user.manager_name || 'Not assigned'],
     ].map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl>

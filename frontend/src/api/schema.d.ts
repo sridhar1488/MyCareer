@@ -1259,6 +1259,8 @@ export interface components {
             started_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
+            /** Return Reason */
+            return_reason?: string | null;
             /** Last Draft Saved At */
             last_draft_saved_at?: string | null;
             /** Identity Snapshot */
@@ -1282,8 +1284,6 @@ export interface components {
             development: components["schemas"]["DevelopmentInput"];
             /** Editable */
             editable: boolean;
-            /** Return Reason */
-            return_reason?: string | null;
         };
         /** AppraisalSummary */
         AppraisalSummary: {
@@ -1318,6 +1318,8 @@ export interface components {
             started_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
+            /** Return Reason */
+            return_reason?: string | null;
         };
         /** AuditPage */
         AuditPage: {
@@ -2359,7 +2361,9 @@ export interface components {
             submitted_revision: number;
             /** Action */
             action: string;
-            evaluation: components["schemas"]["EvaluationInput"];
+            evaluation: components["schemas"]["EvaluationInput"] | null;
+            /** Reason */
+            reason?: string | null;
             /**
              * Occurred At
              * Format: date-time
@@ -2383,6 +2387,10 @@ export interface components {
             policy: {
                 [key: string]: unknown;
             };
+            /** Previous Submitted Revision */
+            previous_submitted_revision?: number | null;
+            previous_employee_responses?: components["schemas"]["EmployeeResponses"] | null;
+            previous_manager_draft?: components["schemas"]["EvaluationInput"] | null;
         };
         /** RevisionResponse */
         RevisionResponse: {
@@ -2657,6 +2665,8 @@ export interface components {
             designation: string;
             /** Country */
             country: string;
+            /** Location */
+            location: string;
             /** Date Joined */
             date_joined: string | null;
             /** Manager Name */

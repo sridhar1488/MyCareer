@@ -1,9 +1,9 @@
-from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 
 from pydantic import BaseModel, Field
 
+from app.core.dates import IstDateTime
 from app.modules.forms.text_limits import TEXT_MINIMUM, ResponseText
 from app.modules.reviews.schemas import ReviewCommand
 
@@ -24,7 +24,7 @@ class CalibrationQueueRow(BaseModel):
     state: str
     version: int
     submitted_revision: int
-    manager_submitted_at: datetime
+    manager_submitted_at: IstDateTime
     manager_overall: str
     calibrated_overall: str
     calculated_overall: str | None
@@ -55,13 +55,13 @@ class MonitorRow(BaseModel):
     status: str
     pending_action: str
     responsible_name: str | None
-    submission_deadline: datetime
+    submission_deadline: IstDateTime
     overdue: bool
     deadline_enforced: bool
-    submitted_at: datetime | None
-    finalized_at: datetime | None
-    released_at: datetime | None
-    acknowledged_at: datetime | None
+    submitted_at: IstDateTime | None
+    finalized_at: IstDateTime | None
+    released_at: IstDateTime | None
+    acknowledged_at: IstDateTime | None
 
 
 class ManagerStatus(BaseModel):

@@ -5,6 +5,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
+from app.core.dates import format_ist
 from app.core.errors import AppError
 from app.core.security import hasher, opaque_token, private_key, token_hash, verify_password
 from app.db.base import utcnow
@@ -27,6 +28,7 @@ def profile(db: Session, user: User, credential: Credential) -> UserResponse:
         department=user.department,
         designation=user.designation,
         country=user.country,
+        location=user.location,
         date_joined=user.date_joined,
         manager_name=manager_name,
         profile_photo_revision=db.scalar(
@@ -54,7 +56,7 @@ def issue_session(db: Session, user: User, settings: Settings):
     csrf_token = csrf_value(settings, auth)
     auth.csrf_hash = token_hash(csrf_token)
     db.add(auth)
-    return raw, csrf_token
+    return raw, csrf_token, auth
 
 
 def login(db: Session, settings: Settings, email: str, password: str):
@@ -68,10 +70,10 @@ def login(db: Session, settings: Settings, email: str, password: str):
     if hasher.check_needs_rehash(credential.password_hash):
         credential.password_hash = hasher.hash(password)
     user.last_login_at = utcnow()
-    raw, csrf_token = issue_session(db, user, settings)
+    raw, csrf_token, auth = issue_session(db, user, settings)
     db.add(AuditEvent(actor_id=user.id, action="auth.login", resource_id=user.id))
     db.commit()
-    return raw, csrf_token, profile(db, user, credential)
+    return raw, csrf_token, profile(db, user, credential), auth
 
 
 def revoke_all(db: Session, user: User):
@@ -106,10 +108,10 @@ def change_password(db: Session, settings: Settings, actor, current_password: st
         .where(PasswordToken.user_id == user.id, PasswordToken.consumed_at.is_(None))
         .values(consumed_at=utcnow())
     )
-    raw, csrf_token = issue_session(db, user, settings)
+    raw, csrf_token, auth = issue_session(db, user, settings)
     db.add(AuditEvent(actor_id=user.id, action="auth.password_changed", resource_id=user.id))
     db.commit()
-    return raw, csrf_token, profile(db, user, credential)
+    return raw, csrf_token, profile(db, user, credential), auth
 
 
 def request_password_reset(db: Session, settings: Settings, email: str) -> str:
@@ -142,7 +144,7 @@ def request_password_reset(db: Session, settings: Settings, email: str) -> str:
             instructions += (
                 f"Alternate reset link: {settings.alternate_public_base_url.rstrip('/')}/#reset={raw}\n"
             )
-        instructions += f"\nThis link expires at {expires:%d %b %Y, %H:%M} UTC and can only be used once.\n\n"
+        instructions += f"\nThis link expires at {format_ist(expires)} and can only be used once.\n\n"
     instructions += "If you did not request this, you can ignore this email."
     enqueue(db, settings, "Reset your MyCareer password", instructions, [user.email])
     db.add(AuditEvent(action="auth.reset_requested", resource_id=user.id, details={"channel": "email"}))

@@ -1,9 +1,24 @@
-from typing import Literal
+from datetime import datetime
+from typing import Annotated, Literal
 
-from pydantic import Field, StrictBool, StrictInt, model_validator
+from pydantic import Field, PlainSerializer, StrictBool, StrictInt, model_validator
 
+from app.core.dates import as_ist
 from app.modules.auth.schemas import StrictInput
 from app.modules.forms.text_limits import HEADER_LIMIT, RESPONSE_LIMIT, TEXT_MINIMUM
+
+
+def display_definition(definition: dict) -> dict:
+    published_at = definition.get("published_at")
+    if isinstance(published_at, str):
+        try:
+            return {**definition, "published_at": as_ist(datetime.fromisoformat(published_at)).isoformat()}
+        except ValueError:
+            pass
+    return definition
+
+
+FormDefinition = Annotated[dict, PlainSerializer(display_definition, return_type=dict, when_used="json")]
 
 
 class Weights(StrictInput):

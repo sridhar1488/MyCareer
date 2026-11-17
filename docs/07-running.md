@@ -52,7 +52,7 @@ pnpm dev
 In a second terminal from `backend/`:
 
 ```powershell
-.venv/Scripts/python.exe -m uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-proxy-headers
+.venv/Scripts/python.exe -m uvicorn app.main:create_app --factory --host 127.0.0.1 --port 8000 --no-proxy-headers --no-server-header
 ```
 
 Open [MyCareer](http://127.0.0.1:5173) or [Swagger](http://127.0.0.1:8000/api/docs). Vite proxies `/api` so cookies stay same-origin. On this Windows workspace, `tools/start-local.ps1` starts API/Vite hidden, records process IDs/start times and writes ignored logs under `.local/`. `tools/stop-local.ps1` stops only those verified process trees. Manage MySQL separately.
@@ -69,6 +69,8 @@ Portable MySQL is under ignored `.local/mysql/`, with existing data in `.local/m
 6. Submissions become read-only. Managers open **Team appraisals**, select an assigned submission, begin review, enter ratings/comments and save a manager draft. **Return for revision** requires a reason; the employee sees it and can edit/resubmit under the existing cycle deadline policy. A resubmission starts a fresh manager review; prior drafts remain in manager review history. Workflow history and employee submitted revisions remain preserved. After saving a complete manager review, **Submit to HR** preserves the manager ratings and requires confirmation that the appraisal meeting took place. HR reviews the submission, can adjust individual ratings with a reason, and approves the recalculated score. The manager then **releases the HR-approved evaluation** to the employee. HR approval and calibration history remain auditable. The employee opens **View appraisal** and can select **I acknowledge receipt**. Empty contributions score zero with their 10% weight retained; populated applicable items require ratings/comments. Only leadership may be N/A with a reason. See the [approved Phase 5 policy](10-phase-5-status.md).
 
 Writes use version checks. Role changes, deactivation and resets revoke sessions. The last active Super Admin is protected. Active reports must be reassigned before manager removal; unfinished reviewer assignments block demotion/deactivation. Directory changes never rewrite existing appraisal reviewers. HR / Super Admin cannot read/edit others' responses through these employee endpoints. **Account audit log** shows administrative/security events without narratives or credentials.
+
+MyCareer displays timestamps and interprets deadline inputs in India Standard Time (IST, UTC+05:30). API timestamps carry the `+05:30` offset. The server compares deadlines and schedules reminders using the stored UTC instants.
 
 ## Password resets and security
 

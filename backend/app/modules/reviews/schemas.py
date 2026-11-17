@@ -1,9 +1,9 @@
-from datetime import datetime
-
 from pydantic import BaseModel, Field, StrictBool, StrictInt
 
+from app.core.dates import IstDateTime
 from app.modules.appraisals.schemas import AppraisalResponse, EmployeeResponses
 from app.modules.auth.schemas import StrictInput
+from app.modules.forms.schemas import FormDefinition
 from app.modules.forms.text_limits import TEXT_MINIMUM, ResponseText
 
 
@@ -92,8 +92,8 @@ class TeamRow(BaseModel):
     state: str
     version: int
     submitted_revision: int
-    submitted_at: datetime | None
-    submission_deadline: datetime
+    submitted_at: IstDateTime | None
+    submission_deadline: IstDateTime
 
 
 class TeamPage(BaseModel):
@@ -108,8 +108,9 @@ class ReviewEventRow(BaseModel):
     appraisal_version: int
     submitted_revision: int
     action: str
-    evaluation: EvaluationInput
-    occurred_at: datetime
+    evaluation: EvaluationInput | None
+    reason: str | None = None
+    occurred_at: IstDateTime
 
 
 class ReviewEventPage(BaseModel):
@@ -123,14 +124,14 @@ class ReleasedResult(BaseModel):
     appraisal_version: int
     submitted_revision: int
     identity_snapshot: dict
-    form_definition: dict
+    form_definition: FormDefinition
     employee_responses: EmployeeResponses
     evaluation: EvaluationInput
     score: ScoreResult
     policy: dict
-    finalized_at: datetime
-    released_at: datetime | None
-    acknowledged_at: datetime | None
+    finalized_at: IstDateTime
+    released_at: IstDateTime | None
+    acknowledged_at: IstDateTime | None
 
 
 class ReviewResponse(BaseModel):
@@ -143,3 +144,6 @@ class ReviewResponse(BaseModel):
     score_preview: ScoreResult | None
     validation_errors: list[str]
     policy: dict
+    previous_submitted_revision: int | None = None
+    previous_employee_responses: EmployeeResponses | None = None
+    previous_manager_draft: EvaluationInput | None = None

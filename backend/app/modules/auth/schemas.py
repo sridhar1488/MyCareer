@@ -39,6 +39,7 @@ class UserResponse(BaseModel):
     department: str
     designation: str
     country: str
+    location: str
     date_joined: date | None
     manager_name: str | None
     profile_photo_revision: str | None = None

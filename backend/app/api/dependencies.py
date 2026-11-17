@@ -22,6 +22,10 @@ def get_db(request: Request):
         yield db
 
 
+def session_deadline(auth: AuthSession, idle_minutes: int):
+    return min(auth.expires_at, auth.last_seen_at + timedelta(minutes=idle_minutes))
+
+
 @dataclass
 class Identity:
     user: User
@@ -35,12 +39,7 @@ def identity(request: Request, db: Session = Depends(get_db), token: str | None 
     auth = db.scalar(select(AuthSession).where(AuthSession.token_hash == token_hash(token)))
     now = utcnow()
     settings = request.app.state.settings
-    if (
-        not auth
-        or auth.revoked_at
-        or auth.expires_at <= now
-        or auth.last_seen_at + timedelta(minutes=settings.session_idle_minutes) <= now
-    ):
+    if not auth or auth.revoked_at or session_deadline(auth, settings.session_idle_minutes) <= now:
         raise AppError(401, "SESSION_EXPIRED", "Your session has expired. Please sign in again.")
     user = db.get(User, auth.user_id)
     credential = db.get(Credential, auth.user_id)
@@ -48,6 +47,7 @@ def identity(request: Request, db: Session = Depends(get_db), token: str | None 
         raise AppError(401, "SESSION_EXPIRED", "Please sign in again.")
     auth.last_seen_at = now
     db.commit()
+    request.state.session_deadline = session_deadline(auth, settings.session_idle_minutes)
     return Identity(user, auth, credential)
 
 

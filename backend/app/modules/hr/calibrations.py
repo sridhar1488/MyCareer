@@ -5,11 +5,13 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, csrf, get_db, require_role
+from app.core.dates import as_ist
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals import service as employee_service
 from app.modules.appraisals.models import Appraisal, AppraisalHistory, Cycle
 from app.modules.audit.models import AuditEvent
+from app.modules.forms.schemas import display_definition
 from app.modules.forms.text_limits import TEXT_MINIMUM, is_single_character
 from app.modules.hr import reports
 from app.modules.hr.schemas import CalibrationQueuePage, OverallScoreOverride
@@ -158,17 +160,21 @@ def detail(
     db.commit()
     return {
         **entry(appraisal, db.get(Cycle, appraisal.cycle_id), submission),
+        "manager_submitted_at": as_ist(submission.submitted_at),
         "manager_evaluation": submission.evaluation,
         "manager_score": submission.score,
         "evaluation": draft.evaluation if draft else submission.evaluation,
         "score_preview": draft.score if draft else submission.score,
-        "employee_snapshot": submission.employee_snapshot,
+        "employee_snapshot": {
+            **submission.employee_snapshot,
+            "form_definition": display_definition(submission.employee_snapshot["form_definition"]),
+        },
         "events": [
             {
                 "action": e.action,
                 "reason": e.reason,
                 "actor_name": db.get(User, e.actor_id).full_name,
-                "occurred_at": e.occurred_at,
+                "occurred_at": as_ist(e.occurred_at),
                 "score": e.score,
             }
             for e in events
@@ -390,5 +396,5 @@ def approve(
         "id": appraisal.id,
         "state": appraisal.state,
         "score": score.model_dump(),
-        "approved_at": db.get(FinalEvaluation, appraisal.id).finalized_at,
+        "approved_at": as_ist(db.get(FinalEvaluation, appraisal.id).finalized_at),
     }

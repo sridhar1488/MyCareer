@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 from starlette.concurrency import run_in_threadpool
 
-from app.api.dependencies import Identity, active_identity, csrf, get_db, identity
+from app.api.dependencies import Identity, active_identity, csrf, get_db, identity, session_deadline
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.audit.models import AuditEvent
@@ -47,7 +47,9 @@ def limit(request, action, principal):
 def login(data: LoginInput, request: Request, response: Response, db: Session = Depends(get_db)):
     limit(request, "login", str(data.email))
     settings = request.app.state.settings
-    raw, csrf_token, user = service.login(db, settings, str(data.email), data.password.get_secret_value())
+    raw, csrf_token, user, auth = service.login(
+        db, settings, str(data.email), data.password.get_secret_value()
+    )
     # Rotate any previous browser session instead of leaving an orphan active.
     previous = request.cookies.get("mi_session")
     if previous:
@@ -63,6 +65,7 @@ def login(data: LoginInput, request: Request, response: Response, db: Session = 
         )
         db.commit()
     apply_cookie(response, settings, raw)
+    request.state.session_deadline = session_deadline(auth, settings.session_idle_minutes)
     return SessionResponse(user=user, csrf_token=csrf_token)
 
 
@@ -127,7 +130,7 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     limit(request, "password_change", actor.user.id)
-    raw, csrf_token, user = service.change_password(
+    raw, csrf_token, user, auth = service.change_password(
         db,
         request.app.state.settings,
         actor,
@@ -135,6 +138,7 @@ def change_password(
         data.new_password.get_secret_value(),
     )
     apply_cookie(response, request.app.state.settings, raw)
+    request.state.session_deadline = session_deadline(auth, request.app.state.settings.session_idle_minutes)
     return SessionResponse(user=user, csrf_token=csrf_token)
 
 

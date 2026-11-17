@@ -1,5 +1,4 @@
 from copy import deepcopy
-from datetime import datetime
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
@@ -7,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, csrf, get_db, require_role
+from app.core.dates import IstDateTime
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals.models import FormVersion
@@ -27,7 +27,7 @@ class TemplateResponse(BaseModel):
     config: FormConfig
     version: int
     published_form_id: str | None
-    updated_at: datetime
+    updated_at: IstDateTime
 
 
 class TemplatePage(BaseModel):

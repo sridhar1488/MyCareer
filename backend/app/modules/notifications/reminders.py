@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import json
 from collections import Counter
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, timedelta
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -12,6 +12,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, csrf, get_db, require_role
+from app.core.dates import IstDateTime, format_ist
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals.models import Appraisal, Cycle
@@ -48,9 +49,9 @@ class ReminderSettingsInput(StrictInput):
 
 class ReminderSettingsResponse(BaseModel):
     state: str
-    employee_deadline: datetime
-    manager_deadline: datetime | None
-    hr_deadline: datetime | None
+    employee_deadline: IstDateTime
+    manager_deadline: IstDateTime | None
+    hr_deadline: IstDateTime | None
     hours_before: list[Offset]
     version: int
 
@@ -191,7 +192,7 @@ def reminder_email(settings, cycle, stage, deadline, count):
     subject = f"MyCareer reminder for {task} · {title}"
     body = f"Appraisal cycle: {title}\n\nPending {task}: {count}. Please complete any outstanding work in MyCareer."
     if deadline:
-        body += f"\nDeadline: {deadline:%d %b %Y, %H:%M} UTC."
+        body += f"\nDeadline: {format_ist(deadline)}."
     if stage == "employee" and deadline and deadline <= utcnow() and not cycle.allow_late_submission:
         body += "\nThe submission window has closed. Contact HR if you still need to submit."
     if settings.public_base_url:

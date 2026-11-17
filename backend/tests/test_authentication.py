@@ -161,7 +161,9 @@ def test_password_change_schema_enforces_eight_to_fifteen_characters(password, v
 @pytest.mark.parametrize("reason", ["expired", "idle", "deactivated", "revoked", "credentials_changed"])
 def test_session_invalidation(client, user_factory, signin, factory, reason):
     user = user_factory()
-    signin(user)
+    login = signin(user)
+    header = "X-Session-Remaining-Ms"
+    assert 0 < int(login.headers[header]) <= client.app.state.settings.session_idle_minutes * 60_000
     with factory.begin() as db:
         session = db.scalar(select(AuthSession).where(AuthSession.user_id == user.id))
         if reason == "expired":
@@ -174,7 +176,9 @@ def test_session_invalidation(client, user_factory, signin, factory, reason):
             db.get(User, user.id).active = False
         if reason == "credentials_changed":
             db.get(User, user.id).credential_version += 1
-    assert client.get("/api/v1/auth/me").status_code == 401
+    expired = client.get("/api/v1/auth/me")
+    assert expired.status_code == 401
+    assert header not in expired.headers
 
 
 def test_reset_is_one_use_hashed_and_revokes_existing_sessions(client, factory, app, user_factory, signin):

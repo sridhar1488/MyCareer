@@ -11,6 +11,7 @@ from openpyxl.utils.exceptions import InvalidFileException
 from pydantic import ValidationError
 from sqlalchemy import select
 
+from app.core.dates import format_ist
 from app.core.errors import AppError
 from app.core.security import opaque_token, token_hash
 from app.db.base import utcnow
@@ -324,7 +325,7 @@ def setup_email_instructions(link, settings):
         )
     base_url = (settings.public_base_url or settings.allowed_origins[0]).rstrip("/")
     instructions = (
-        f"{setup}\n\nYour setup access expires at {link['expires_at']:%d %b %Y, %H:%M} UTC "
+        f"{setup}\n\nYour setup access expires at {format_ist(link['expires_at'])} "
         "and can only be used once.\n\n"
         f"After setup, sign in at {base_url} with your work email ({link['email']}) and the password you chose."
     )

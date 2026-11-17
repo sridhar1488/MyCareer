@@ -4,6 +4,7 @@ from datetime import UTC
 from sqlalchemy import delete, func, select
 
 from app.api.dependencies import require_owner
+from app.core.dates import format_ist
 from app.core.errors import AppError
 from app.db.base import utcnow
 from app.modules.appraisals.models import (
@@ -22,6 +23,7 @@ from app.modules.appraisals.schemas import (
     AppraisalSummary,
     CycleResponse,
     DevelopmentInput,
+    ItemInput,
     SelfAssessmentInput,
 )
 from app.modules.audit.models import AuditEvent
@@ -146,7 +148,7 @@ def activate(db, cycle, actor):
             db,
             settings,
             f"Action needed: {cycle.title} appraisal is open",
-            f"Hello {person.full_name},\n\nYour appraisal cycle {cycle.title} is open. Please complete and submit your self-assessment by {cycle.submission_deadline:%d %b %Y, %H:%M} UTC.\n\nOpen MyCareer: {base_url}",
+            f"Hello {person.full_name},\n\nYour appraisal cycle {cycle.title} is open. Please complete and submit your self-assessment by {format_ist(cycle.submission_deadline)}.\n\nOpen MyCareer: {base_url}",
             [person.email],
             [manager.email] if manager else (),
         )
@@ -194,6 +196,17 @@ def owned(db, appraisal_id, actor, write=False, expected_version=None):
 
 def summary(db, appraisal):
     cycle = db.get(Cycle, appraisal.cycle_id)
+    return_reason = None
+    if appraisal.state == "RETURNED_FOR_REVISION":
+        return_reason = db.scalar(
+            select(AppraisalHistory.reason)
+            .where(
+                AppraisalHistory.appraisal_id == appraisal.id,
+                AppraisalHistory.to_state == "RETURNED_FOR_REVISION",
+            )
+            .order_by(AppraisalHistory.appraisal_version.desc(), AppraisalHistory.id)
+            .limit(1)
+        )
     return AppraisalSummary(
         id=appraisal.id,
         cycle_id=cycle.id,
@@ -206,6 +219,7 @@ def summary(db, appraisal):
         submission_deadline=cycle.submission_deadline,
         started_at=appraisal.started_at,
         submitted_at=appraisal.submitted_at,
+        return_reason=return_reason,
     )
 
 
@@ -246,39 +260,31 @@ def detail(db, appraisal, *, include_draft_save_time=False):
                 AuditEvent.action == "appraisal.draft_saved",
             )
         )
-    return_reason = None
-    if appraisal.state == "RETURNED_FOR_REVISION":
-        return_reason = db.scalar(
-            select(AppraisalHistory.reason)
-            .where(
-                AppraisalHistory.appraisal_id == appraisal.id,
-                AppraisalHistory.to_state == "RETURNED_FOR_REVISION",
-            )
-            .order_by(
-                AppraisalHistory.appraisal_version.desc(),
-                AppraisalHistory.occurred_at.desc(),
-                AppraisalHistory.id,
-            )
-            .limit(1)
-        )
+    identity = dict(appraisal.identity_snapshot)
+    if appraisal.content_revision == 0 and not identity.get("country"):
+        identity["country"] = db.get(User, appraisal.employee_id).country
     return AppraisalResponse(
         **summary(db, appraisal).model_dump(),
         last_draft_saved_at=last_draft_saved_at.replace(tzinfo=UTC) if last_draft_saved_at else None,
-        identity_snapshot=appraisal.identity_snapshot,
+        identity_snapshot=identity,
         content_revision=appraisal.content_revision,
         form_definition=definition,
         min_goals=cycle.min_goals,
         allow_late_submission=cycle.allow_late_submission,
         **responses(db, appraisal),
         editable=appraisal.state in EDITABLE_STATES and cycle.state == "ACTIVE",
-        return_reason=return_reason,
     )
 
 
 def validate_item_lengths(db, appraisal, items, kind, title_limit, response_limit):
+    section = "goals" if kind == "GOAL" else "contributions"
     fields = (
-        ("description", "title", title_limit),
-        ("employee_narrative", "achievement description", response_limit),
+        (
+            "description",
+            "responsibility / goal description" if kind == "GOAL" else "contribution area",
+            title_limit,
+        ),
+        ("employee_narrative", "achievements and self-assessment", response_limit),
     )
     over_limit = []
     for number, item in enumerate(items, 1):
@@ -294,7 +300,7 @@ def validate_item_lengths(db, appraisal, items, kind, title_limit, response_limi
         .where(AppraisalItem.appraisal_id == appraisal.id, AppraisalItem.kind == kind)
         .with_for_update()
     )
-    existing = Counter((field, getattr(row, field)) for row in saved for field, _, _ in fields)
+    existing = Counter((field, getattr(row, field).strip()) for row in saved for field, _, _ in fields)
     for number, field, label, limit, text in over_limit:
         key = (field, text)
         if existing[key] == 0:
@@ -302,11 +308,29 @@ def validate_item_lengths(db, appraisal, items, kind, title_limit, response_limi
                 422,
                 f"{kind}_TEXT_LIMIT",
                 f"{kind.title()} {number} {label} must be {limit} characters or fewer.",
+                fields=[
+                    {
+                        "field": f"{section}.{number - 1}.{field}",
+                        "message": f"{label.capitalize()} must be {limit} characters or fewer.",
+                    }
+                ],
             )
         existing[key] -= 1
 
 
+def trim_draft_item(item):
+    return ItemInput(description=item.description.strip(), employee_narrative=item.employee_narrative.strip())
+
+
 def save_draft(db, appraisal, data: SelfAssessmentInput, actor):
+    # Normalize only new writes, never historical response snapshots.
+    data.goals = [trim_draft_item(item) for item in data.goals]
+    data.contributions = [trim_draft_item(item) for item in data.contributions]
+    development = {
+        key: value.strip() for key, value in data.development.model_dump(exclude={"extra_answers"}).items()
+    }
+    answers = {key: value.strip() for key, value in data.development.extra_answers.items()}
+    data.development = DevelopmentInput(**development, extra_answers=answers)
     config = config_for(db.get(FormVersion, appraisal.form_version_id).definition)
     validate_employee(config, data)
     validate_item_lengths(
@@ -314,15 +338,15 @@ def save_draft(db, appraisal, data: SelfAssessmentInput, actor):
     )
     validate_item_lengths(db, appraisal, data.contributions, "CONTRIBUTION", HEADER_LIMIT, RESPONSE_LIMIT)
     plan = db.get(DevelopmentPlan, appraisal.id, with_for_update=True, populate_existing=True)
-    development = data.development.model_dump(exclude={"extra_answers"})
     for key, value in development.items():
-        validate_text_change(value, getattr(plan, key), key.replace("_", " ").capitalize())
-    validate_answer_lengths(data.development.extra_answers, plan.extra_answers or {})
+        validate_text_change(value, getattr(plan, key).strip(), key.replace("_", " ").capitalize())
+    previous_answers = {key: value.strip() for key, value in (plan.extra_answers or {}).items()}
+    validate_answer_lengths(data.development.extra_answers, previous_answers)
 
     db.execute(delete(AppraisalItem).where(AppraisalItem.appraisal_id == appraisal.id))
     for kind, entries in [("GOAL", data.goals), ("CONTRIBUTION", data.contributions)]:
         for position, entry in enumerate(entries, start=1):
-            if not entry.description.strip() and not entry.employee_narrative.strip():
+            if not entry.description and not entry.employee_narrative:
                 continue
             db.add(
                 AppraisalItem(
@@ -391,6 +415,11 @@ def submit(db, appraisal, actor):
     ):
         raise AppError(409, "REVIEWER_UNAVAILABLE", "Your assigned reviewer is unavailable. Contact HR.")
     previous = appraisal.state
+    if appraisal.content_revision == 0 and not appraisal.identity_snapshot.get("country"):
+        appraisal.identity_snapshot = {
+            **appraisal.identity_snapshot,
+            "country": db.get(User, appraisal.employee_id).country,
+        }
     appraisal.content_revision += 1
     appraisal.state = "SUBMITTED"
     appraisal.version += 1

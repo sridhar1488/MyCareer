@@ -10851,6 +10851,17 @@
             ],
             "title": "Submitted At"
           },
+          "return_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Reason"
+          },
           "last_draft_saved_at": {
             "anyOf": [
               {
@@ -10905,17 +10916,6 @@
           "editable": {
             "type": "boolean",
             "title": "Editable"
-          },
-          "return_reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Return Reason"
           }
         },
         "type": "object",
@@ -11007,6 +11007,17 @@
               }
             ],
             "title": "Submitted At"
+          },
+          "return_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Return Reason"
           }
         },
         "type": "object",
@@ -13677,7 +13688,25 @@
             "title": "Action"
           },
           "evaluation": {
-            "$ref": "#/components/schemas/EvaluationInput"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
           },
           "occurred_at": {
             "type": "string",
@@ -13746,6 +13775,37 @@
             "additionalProperties": true,
             "type": "object",
             "title": "Policy"
+          },
+          "previous_submitted_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Previous Submitted Revision"
+          },
+          "previous_employee_responses": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EmployeeResponses"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "previous_manager_draft": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EvaluationInput"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -14473,6 +14533,10 @@
             "type": "string",
             "title": "Country"
           },
+          "location": {
+            "type": "string",
+            "title": "Location"
+          },
           "date_joined": {
             "anyOf": [
               {
@@ -14528,6 +14592,7 @@
           "department",
           "designation",
           "country",
+          "location",
           "date_joined",
           "manager_name",
           "roles",

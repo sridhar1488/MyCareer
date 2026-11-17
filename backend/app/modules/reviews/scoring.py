@@ -73,11 +73,11 @@ def validation_errors(
         for index, entry in enumerate(entries):
             label = f"{section.title()} {index + 1}"
             if enforce_minimum:
-                if is_single_character(entry.comment):
+                if not entry.not_applicable and is_single_character(entry.comment):
                     errors.append(
                         f"{label}: enter at least {TEXT_MINIMUM} characters in the supporting comment."
                     )
-                if is_single_character(entry.applicability_reason):
+                if entry.not_applicable and is_single_character(entry.applicability_reason):
                     errors.append(
                         f"{label}: enter at least {TEXT_MINIMUM} characters in the applicability reason."
                     )

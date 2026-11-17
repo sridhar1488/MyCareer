@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import type { components } from '../../api/schema';
 import { api } from '../../api/client';
 import { Feedback } from '../../components/Feedback';
+import { localDateTime } from '../../utils/dates';
 import { ManagerPicker } from './ManagerPicker';
 
 type Row = components['schemas']['DirectoryUser'];
@@ -31,7 +32,7 @@ export function UserActions({ user, mode, ownId, onClose, onSaved }: { user: Row
   }
   return <section className="panel editor"><div className="section-heading"><h2>{titles[mode]} · {user.full_name}</h2><button className="button small" onClick={onClose} disabled={busy}>Cancel</button></div>
     {mode === 'setup' && !link && <p className="muted">Creates a new one-time link valid for seven days. If live email is enabled, MyCareer emails it to this employee; otherwise you can copy it below.</p>}
-    {link && <div>{link.email_status === 'queued' && <Feedback success message={`Setup email queued to ${user.email}.`} />}{link.email_status === 'test_only' && <Feedback message="Mail is in test mode: only a test notification was queued, without the working link. Share the link below privately after testing." />}{link.email_status === 'disabled' && <Feedback message="Email notifications are disabled. Share the link below privately." />}<p>This one-time link for {user.full_name} expires {link.expires_at} UTC and is shown once.</p><input readOnly aria-label="Private setup link" value={link.setup_url} onFocus={e=>e.target.select()}/><button className="button" onClick={() => navigator.clipboard.writeText(link.setup_url).then(() => setCopied(true)).catch(() => setCopied(false))}>{copied ? 'Copied' : 'Copy setup link'}</button><button className="button" onClick={onSaved}>Done</button></div>}
+    {link && <div>{link.email_status === 'queued' && <Feedback success message={`Setup email queued to ${user.email}.`} />}{link.email_status === 'test_only' && <Feedback message="Mail is in test mode: only a test notification was queued, without the working link. Share the link below privately after testing." />}{link.email_status === 'disabled' && <Feedback message="Email notifications are disabled. Share the link below privately." />}<p>This one-time link for {user.full_name} expires {localDateTime(link.expires_at)} and is shown once.</p><input readOnly aria-label="Private setup link" value={link.setup_url} onFocus={e=>e.target.select()}/><button className="button" onClick={() => navigator.clipboard.writeText(link.setup_url).then(() => setCopied(true)).catch(() => setCopied(false))}>{copied ? 'Copied' : 'Copy setup link'}</button><button className="button" onClick={onSaved}>Done</button></div>}
     {!link && <>{error && <Feedback message={error} />}<form onSubmit={submit} aria-busy={busy}>
       {mode === 'role' && <>
         <label htmlFor="new-role">Role</label>

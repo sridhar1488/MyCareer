@@ -1,9 +1,9 @@
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, or_, select
+from sqlalchemy import func, literal, or_, select, union_all
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, csrf, get_db, require_role
-from app.modules.appraisals.models import Appraisal, Cycle
+from app.modules.appraisals.models import Appraisal, AppraisalHistory, Cycle
 from app.modules.appraisals.schemas import HistoryPage, HistoryRow
 from app.modules.reviews import service
 from app.modules.reviews.models import Acknowledgement, FinalEvaluation, Release, ReviewEvent
@@ -155,15 +155,50 @@ def review_history(
     db: Session = Depends(get_db),
 ):
     service.assigned(db, appraisal_id, actor)
-    query = select(ReviewEvent).where(ReviewEvent.appraisal_id == appraisal_id)
-    count = db.scalar(select(func.count()).select_from(query.subquery()))
-    events = db.scalars(
-        query.order_by(ReviewEvent.appraisal_version.desc(), ReviewEvent.id)
+    # Include existing return events without rewriting the immutable review log.
+    submission = AppraisalHistory.__table__.alias("submission")
+    revision = (
+        select(func.count())
+        .where(
+            submission.c.appraisal_id == appraisal_id,
+            submission.c.to_state == "SUBMITTED",
+            submission.c.appraisal_version <= AppraisalHistory.appraisal_version,
+        )
+        .correlate(AppraisalHistory)
+        .scalar_subquery()
+    )
+    query = union_all(
+        select(
+            ReviewEvent.id,
+            ReviewEvent.appraisal_version,
+            ReviewEvent.submitted_revision,
+            ReviewEvent.action,
+            ReviewEvent.evaluation,
+            ReviewEvent.occurred_at,
+            literal(None).label("reason"),
+        ).where(ReviewEvent.appraisal_id == appraisal_id),
+        select(
+            AppraisalHistory.id,
+            AppraisalHistory.appraisal_version,
+            revision,
+            literal("RETURNED_FOR_REVISION"),
+            literal(None),
+            AppraisalHistory.occurred_at,
+            AppraisalHistory.reason,
+        ).where(
+            AppraisalHistory.appraisal_id == appraisal_id,
+            AppraisalHistory.to_state == "RETURNED_FOR_REVISION",
+        ),
+    ).subquery()
+    count = db.scalar(select(func.count()).select_from(query))
+    events = db.execute(
+        select(query)
+        .order_by(query.c.appraisal_version.desc(), query.c.id)
         .offset((page - 1) * page_size)
         .limit(page_size)
-    )
+    ).mappings()
     return ReviewEventPage(
-        items=[ReviewEventRow.model_validate(e, from_attributes=True) for e in events],
+        items=[ReviewEventRow.model_validate(dict(e)) for e in events],
         total=count,
         page=page,
         page_size=page_size,
@@ -179,8 +214,6 @@ def workflow_history(
     db: Session = Depends(get_db),
 ):
     service.assigned(db, appraisal_id, actor)
-    from app.modules.appraisals.models import AppraisalHistory
-
     query = select(AppraisalHistory).where(AppraisalHistory.appraisal_id == appraisal_id)
     count = db.scalar(select(func.count()).select_from(query.subquery()))
     events = db.scalars(

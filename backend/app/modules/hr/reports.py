@@ -8,6 +8,7 @@ from openpyxl.cell import WriteOnlyCell
 from openpyxl.cell.cell import ILLEGAL_CHARACTERS_RE
 from openpyxl.styles import Alignment, Font, PatternFill
 
+from app.core.dates import as_ist
 from app.modules.forms.config import config_for
 
 
@@ -54,7 +55,7 @@ def calibration_excel(records):
             "Manager score / 5",
             "Calibrated score / 5",
             "Approval status",
-            "Manager submitted (UTC)",
+            "Manager submitted (IST)",
         ],
         header=True,
     )
@@ -72,7 +73,7 @@ def calibration_excel(records):
                 float(row["manager_overall"]),
                 float(row["calibrated_overall"]),
                 "Waiting for HR approval",
-                row["manager_submitted_at"],
+                as_ist(row["manager_submitted_at"]).replace(tzinfo=None),
             ]
         )
         count += 1
@@ -123,7 +124,7 @@ def excel(records):
             "Department",
             "Manager",
             "Status",
-            "Approved Date",
+            "Approved at (IST)",
             "Overall / 5",
         ]
     )
@@ -160,7 +161,7 @@ def excel(records):
                 identity.get("department", ""),
                 identity.get("manager_name", ""),
                 appraisal.state,
-                result.finalized_at,
+                as_ist(result.finalized_at).replace(tzinfo=None),
                 float(result.score.overall.display),
             ]
         )

@@ -1,4 +1,4 @@
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
@@ -7,6 +7,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import Identity, csrf, get_db, require_role
+from app.core.dates import IstDateTime
 from app.core.errors import AppError
 from app.core.security import hasher, opaque_token
 from app.db.base import utcnow
@@ -34,7 +35,7 @@ class ImportPreview(BaseModel):
     batch_id: str | None
     rows: list[dict]
     errors: list[ImportIssue]
-    expires_at: datetime | None
+    expires_at: IstDateTime | None
 
 
 class SetupLink(BaseModel):
@@ -42,7 +43,7 @@ class SetupLink(BaseModel):
     full_name: str
     email: str
     setup_url: str
-    expires_at: datetime
+    expires_at: IstDateTime
 
 
 class ImportResult(BaseModel):

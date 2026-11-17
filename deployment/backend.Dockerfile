@@ -9,4 +9,4 @@ COPY backend/alembic.ini ./alembic.ini
 RUN useradd --create-home --uid 10001 leapmetrics
 USER 10001
 EXPOSE 8000
-CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers"]
+CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--no-proxy-headers", "--no-server-header"]

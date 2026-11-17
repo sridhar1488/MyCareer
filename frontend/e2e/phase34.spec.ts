@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { readFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { dateTimeInput } from '../src/utils/dates';
 
 const password = process.env.MI_E2E_PASSWORD!;
+test.use({ timezoneId: 'America/Los_Angeles' });
 test('HR creates an employee and cycle; employee saves extra goals, reviews and submits', async ({ page }) => {
   test.setTimeout(90000);
   const suffix = Date.now().toString();
@@ -35,6 +37,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   }
   await page.getByLabel('Find a manager').fill('E2E-manager');
   await page.getByRole('radio', { name: /Test Manager/ }).check();
+  await page.getByLabel('Location', { exact: true }).fill('Bangalore');
   await page.getByLabel('Date joined', { exact: true }).fill('2024-01-15');
   await page.getByLabel('Temporary password', { exact: true }).fill(password);
   await page.getByRole('button', { name: 'Create account', exact: true }).click();
@@ -47,7 +50,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByLabel('Appraisal period start').fill('2026-01-01');
   await page.getByLabel('Appraisal period end').fill('2026-12-31');
   const deadline = new Date(Date.now() + 7 * 86400000);
-  await page.getByLabel('Employee submission deadline').fill(deadline.toISOString().slice(0,16));
+  await page.getByLabel('Employee submission deadline').fill(dateTimeInput(deadline.toISOString()));
   await page.getByLabel('Find employees').fill('search with no matching participant');
   await page.getByRole('button', { name: 'Select all employees', exact: true }).click();
   await expect(page.getByRole('status').filter({ hasText: /Selected \d+ eligible employee/ })).toBeVisible();
@@ -57,7 +60,11 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByRole('button', { name: 'Clear selection', exact: true }).click();
   await expect(participant).not.toBeChecked();
   await participant.check();
+  const cycleSaved = page.waitForResponse(response => response.url().endsWith('/api/v1/cycles') && response.request().method() === 'POST');
   await page.getByRole('button', { name: 'Save draft cycle', exact: true }).click();
+  const createdCycle = await (await cycleSaved).json();
+  expect(createdCycle.submission_deadline).toMatch(/\+05:30$/);
+  expect(Date.parse(createdCycle.submission_deadline)).toBe(Math.floor(deadline.getTime() / 60000) * 60000);
   await expect(page.getByRole('status').filter({hasText:'Draft cycle saved'})).toBeVisible();
   await page.getByRole('row').filter({ hasText: cycleTitle }).getByRole('button', { name: 'Activate cycle', exact: true }).click();
   await page.getByRole('button', { name: 'Confirm activation', exact: true }).click();
@@ -65,8 +72,8 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByRole('button', { name: 'HR monitoring', exact: true }).click();
   await page.locator('summary').filter({ hasText: 'Cycle reminders' }).click();
   await page.getByLabel('Appraisal cycle for reminders').selectOption({ label: cycleTitle });
-  await page.getByLabel('Manager review deadline').fill(new Date(deadline.getTime() + 14 * 86400000).toISOString().slice(0,16));
-  await page.getByLabel('HR calibration deadline').fill(new Date(deadline.getTime() + 29 * 86400000).toISOString().slice(0,16));
+  await page.getByLabel('Manager review deadline').fill(dateTimeInput(new Date(deadline.getTime() + 14 * 86400000).toISOString()));
+  await page.getByLabel('HR calibration deadline').fill(dateTimeInput(new Date(deadline.getTime() + 29 * 86400000).toISOString()));
   await page.getByRole('checkbox', { name: '3 days before each deadline' }).check();
   await page.getByRole('button', { name: 'Save reminder settings' }).click();
   await expect(page.getByRole('status').filter({ hasText: 'Reminder settings saved.' })).toBeVisible();
@@ -83,10 +90,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await page.getByRole('button', { name: 'Save new password', exact: true }).click();
   await page.getByLabel('User profile', { exact: true }).click();
   await page.getByRole('button', { name: 'Your profile', exact: true }).click();
-  const joiningDate = await page.evaluate(() => new Intl.DateTimeFormat(undefined, {
-    dateStyle: 'medium', timeZone: 'UTC',
-  }).format(new Date('2024-01-15T00:00:00Z')));
-  await expect(page.getByText(joiningDate, { exact: true })).toBeVisible();
+  await expect(page.getByText('15 Jan 2024', { exact: true })).toBeVisible();
   await expect(page.getByText('India', { exact: true })).toBeVisible();
   await expect(page.getByText('Current reporting manager', { exact: true })).toBeVisible();
   await expect(page.getByText('Test Manager', { exact: true })).toBeVisible();
@@ -94,10 +98,18 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(page.getByText(/Appraisal period: 2026/)).toBeVisible();
   await expect(page.getByText(/Assigned reviewer: Test Manager/)).toBeVisible();
   await page.getByRole('button', { name: 'Open self-assessment', exact: true }).click();
+  await expect(page.getByText('Communication & Interpersonal Skills', { exact: true })).toBeVisible();
+  await expect(page.getByText(/Up to 25 files, 10 MB each/)).toBeVisible();
+  await expect(page.locator('.appraisal-heading').getByText(/Submit by.*IST/)).toBeVisible();
   const firstDevelopmentField = page.getByLabel(
     'Most important achievements and contributions to company / project success', { exact: true }
   );
   await expect(firstDevelopmentField).toHaveAccessibleDescription('1000 of 1000 characters remaining');
+  await page.getByRole('button', { name: 'Save and review submission', exact: true }).click();
+  await expect(page.getByRole('alert')).toContainText('Complete at least');
+  await expect(page.getByRole('button', { name: 'Submit to reporting manager', exact: true })).toHaveCount(0);
+  await page.reload();
+  await expect(firstDevelopmentField).toBeVisible();
   async function expectDevelopmentFocusClearance() {
     await firstDevelopmentField.focus();
     await expect(firstDevelopmentField).toHaveCSS('outline-style', 'solid');
@@ -162,9 +174,25 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(firstGoal).toHaveAttribute('maxlength', '500');
   await expect(page.getByLabel('Achievements and self-assessment', { exact: true }).first()).toHaveAttribute('maxlength', '1000');
   await expect(firstGoal).toHaveAccessibleDescription('500 of 500 characters remaining');
+  await expect(page.getByRole('button', { name: 'Remove goal 1', exact: true })).toBeDisabled();
   await firstGoal.fill('Unsaved test edit');
   await expect(firstGoal).toHaveAccessibleDescription('483 of 500 characters remaining');
   await expect(draftSave).toBeEnabled();
+  const unsavedUrl = page.url();
+  await page.route('**/history?page=1', async route => {
+    const response = await route.fetch();
+    await route.fulfill({response, headers: {...response.headers(), 'x-session-remaining-ms': '300'}});
+  }, {times: 1});
+  await page.getByRole('button', { name: 'View workflow history', exact: true }).click();
+  await expect(page.getByText(/Sign in with the same account to recover/)).toBeVisible();
+  await expect(firstGoal).toHaveCount(0);
+  expect(draftWrites).toBe(0);
+  await page.getByLabel('Work email').fill(email);
+  await page.getByLabel('Password', {exact: true}).fill(`${password}-person`);
+  await page.getByRole('button', {name: 'Sign in', exact: true}).click();
+  await expect(page).toHaveURL(unsavedUrl);
+  await expect(firstGoal).toHaveValue('Unsaved test edit');
+  await expect(page.getByText(/Your unsaved edits were recovered/)).toBeVisible();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.getByRole('button', { name: 'Back to top', exact: true }).click();
   const appraisalStart = page.getByRole('button', { name: 'Back to my appraisals', exact: true });
@@ -176,9 +204,18 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(draftSave).toBeDisabled();
   const addGoal = page.getByRole('button', { name: 'Add goal', exact: true });
   await expect(addGoal).toHaveText('+');
+  await expect(addGoal).toBeDisabled();
+  await firstGoal.fill('Start a goal');
   await addGoal.click();
+  await expect(addGoal).toBeDisabled();
   const removeGoal = page.getByRole('button', { name: 'Remove goal 2', exact: true });
   await expect(removeGoal).toHaveText('−');
+  const secondGoal = page.getByRole('group', { name: 'Goal 2', exact: true });
+  await secondGoal.getByLabel('Responsibility / goal description').fill('Keep this text');
+  page.once('dialog', dialog => dialog.dismiss());
+  await removeGoal.click();
+  await expect(secondGoal.getByLabel('Responsibility / goal description')).toHaveValue('Keep this text');
+  page.once('dialog', dialog => dialog.accept());
   await removeGoal.click();
   await expect(page.getByRole('group', { name: 'Goal 2', exact: true })).toHaveCount(0);
   for (let i = 0; i < 7; i++) {
@@ -225,19 +262,25 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   expect(toastPosition.centerOffset).toBeLessThanOrEqual(1);
   await expect(draftSave).toBeDisabled();
   expect(draftWrites).toBe(2);
-  await expect(lastDraftSave).toHaveAttribute('datetime', /Z$/);
+  await expect(lastDraftSave).toHaveAttribute('datetime', /\+05:30$/);
   const firstDraftSave = (await lastDraftSave.getAttribute('datetime'))!;
+  const detailUrl = page.url();
+  expect(new URL(detailUrl).searchParams.get('id')).toBeTruthy();
   await page.reload();
-  await page.getByRole('button', { name: 'Open self-assessment', exact: true }).click();
+  await expect(page).toHaveURL(detailUrl);
+  await expect(lastDraftSave).toHaveAttribute('datetime', firstDraftSave);
+  await page.goBack();
+  await expect(page.getByRole('button', { name: 'Open self-assessment', exact: true })).toBeVisible();
+  await page.goForward();
+  await expect(page).toHaveURL(detailUrl);
   await expect(lastDraftSave).toHaveAttribute('datetime', firstDraftSave);
   await expect(page.getByLabel('Responsibility / goal description', { exact: true })).toHaveCount(7);
   await expect(draftSave).toBeDisabled();
   await page.locator('.appraisal-heading').scrollIntoViewIfNeeded();
   await page.screenshot({path:'../.local/phase4-employee.png'});
   await page.getByRole('button', { name: 'Save and review submission', exact: true }).click();
-  await expect(page.getByText('7. Goal 7', { exact: true })).toBeVisible();
   expect(draftWrites).toBe(2);
-  await page.getByRole('button', { name: 'Submit to reporting manager', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Submit to reporting manager', exact: true })).toHaveCount(0);
   await expect(page.getByRole('alert')).toContainText('Enter a response or NA for each Achievements and development question.');
   const goalNarrative = page.getByRole('group', { name: 'Goal 7', exact: true })
     .getByLabel('Achievements and self-assessment', { exact: true });
@@ -265,7 +308,31 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(page.getByRole('alert')).toContainText('Use at least 2 characters');
   await support.fill('NA');
   await expect(page.getByRole('alert')).toHaveCount(0);
+  // A second browser tab saves against the same version while this tab has local edits.
+  const otherTab = await page.context().newPage();
+  await otherTab.goto(detailUrl);
+  await otherTab.getByLabel('Responsibility / goal description', { exact: true }).first().fill('Updated goal in another tab');
+  await otherTab.getByRole('button', { name: 'Save draft', exact: true }).click();
+  await expect(otherTab.getByText('Draft saved.', { exact: true })).toBeVisible();
+  await otherTab.close();
+  await draftSave.click();
+  await expect(page.getByRole('alert')).toHaveText(/Your latest request was not saved/);
+  await expect(page.getByRole('alert')).toBeInViewport();
+  await page.getByRole('button', { name: 'Load latest version and keep a copy of my edits' }).click();
+  await expect(firstGoal).toHaveValue('Updated goal in another tab');
+  await expect(page.getByLabel('Previous unsaved responses')).toHaveValue(/Goal 7\nGoal 7\nNA/);
+  await goalNarrative.fill('NA');
+  await contributionNarrative.fill('N/A');
+  for (const field of await development.all()) await field.fill('NA');
+  await page.getByRole('button', { name: 'Dismiss copy' }).click();
+  await page.getByLabel('Add files').setInputFiles({
+    name: 'review-evidence.pdf',
+    mimeType: 'application/pdf',
+    buffer: Buffer.from('%PDF-1.4\nTest evidence'),
+  });
+  await expect(page.getByText('review-evidence.pdf', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Save and review submission', exact: true }).click();
+  await expect(page.locator('.submission-review').getByText('review-evidence.pdf', { exact: true })).toBeVisible();
   await expect(lastDraftSave).not.toHaveAttribute('datetime', firstDraftSave);
   const submit = page.getByRole('button', { name: 'Submit to reporting manager', exact: true });
   let submissions = 0;
@@ -289,7 +356,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(page.getByLabel('Responsibility / goal description', { exact: true }).first()).toBeDisabled();
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'View workflow history', exact: true }).click();
-  await expect(page.getByText('DRAFT → SUBMITTED', { exact: true })).toBeVisible();
+  await expect(page.getByText('Draft → Submitted', { exact: true })).toBeVisible();
   for (const name of ['Previous', 'Next']) {
     const button = page.getByRole('button', { name, exact: true });
     await expect(button).toBeDisabled();
@@ -299,4 +366,14 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(page.getByText('This is the preserved copy of your submission.', { exact: false })).toBeVisible();
   await page.setViewportSize({width:390,height:844});
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+  const appraisalId = new URL(page.url()).searchParams.get('id');
+  expect(appraisalId).toBeTruthy();
+  const profile = await page.request.get('/api/v1/auth/me');
+  expect(await profile.json()).toMatchObject({ country: '', location: 'Bangalore' });
+  const appraisal = await page.request.get(`/api/v1/appraisals/${appraisalId}`);
+  expect(await appraisal.json()).toMatchObject({ state: 'SUBMITTED', identity_snapshot: { country: '' } });
+  await page.reload();
+  await expect(page.locator('.profile-grid').getByText('India', { exact: true })).toBeVisible();
+  await expect(page.getByLabel('Responsibility / goal description', { exact: true }).first()).toBeDisabled();
 });

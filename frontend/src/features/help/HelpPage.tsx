@@ -33,7 +33,7 @@ export function HelpPage() {
     {loading && <p role="status">Loading help guides…</p>}
     {error && <><Feedback message={error} /><button className="button" onClick={() => setRevision(value => value + 1)}>Try again</button></>}
     {guides.map((guide, guideIndex) => <section className="panel help-guide" key={guide.title}>
-      <div className="help-guide-heading"><div><span className="help-audience">{guide.audience}</span><h2>{guide.title}</h2><p className="muted">{guide.summary}</p></div><span className="help-guide-count">{guide.steps.length} steps</span></div>
+      <div className="help-guide-heading"><div><span className="help-audience">{guide.audience}</span><h2>{guide.title}</h2><p className="muted">{guide.summary}</p></div><span className="help-guide-count">{guide.steps.length} {guide.steps.length === 1 ? 'step' : 'steps'}</span></div>
       {guide.steps.length > 0 && <div className="help-steps"><h3>Walkthrough</h3>{guide.steps.map((step, index) => <details className="help-step" open={index === 0} key={step.title}>
         <summary><span className="help-step-number">{index + 1}</span><span>{step.title}</span></summary>
         <div className="help-step-content"><div><p>{step.description}</p><ul>{step.bullets.map(bullet => <li key={bullet}>{bullet}</li>)}</ul></div><HelpScreenPreview preview={step.screenshot} /></div>

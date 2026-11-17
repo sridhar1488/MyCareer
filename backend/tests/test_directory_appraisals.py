@@ -292,7 +292,7 @@ def test_employee_save_extra_goals_submit_immutable_snapshot(client, factory, se
     assert response.status_code == 200, response.text
     assert len(response.json()["goals"]) == 7 and response.json()["started_at"]
     last_draft_saved_at = response.json()["last_draft_saved_at"]
-    assert last_draft_saved_at and last_draft_saved_at.endswith("Z")
+    assert last_draft_saved_at and last_draft_saved_at.endswith("+05:30")
     assert client.put(path + "/self-assessment", json=draft(), headers=h).status_code == 409
     assert client.get(path).json()["last_draft_saved_at"] == last_draft_saved_at
     submitted = client.post(path + "/submit", json={"expected_version": 2}, headers=h)
@@ -322,6 +322,7 @@ def test_assessment_character_limits_preserve_existing_long_drafts(client, facto
             response = client.put(path + "/self-assessment", json=draft(**{section: [over_limit]}), headers=h)
             assert response.status_code == 422
             assert response.json()["error"]["code"] == error
+            assert response.json()["error"]["field_errors"][0]["field"] == f"{section}.0.{field}"
     response = client.put(
         path + "/self-assessment", json=draft(development={"development_plan": "D" * 1001}), headers=h
     )
@@ -371,6 +372,7 @@ def test_each_development_answer_is_required_only_at_submission(client, setup_ap
             path + "/self-assessment", json=draft(version, development={field: "  "}), headers=h
         )
         assert saved.status_code == 200, saved.text
+        assert saved.json()["development"][field] == ""
         version = saved.json()["version"]
         rejected = client.post(path + "/submit", json={"expected_version": version}, headers=h)
         assert rejected.status_code == 422
@@ -396,6 +398,25 @@ def test_each_development_answer_is_required_only_at_submission(client, setup_ap
     submitted = client.post(path + "/submit", json={"expected_version": saved.json()["version"]}, headers=h)
     assert submitted.status_code == 200, submitted.text
     assert submitted.json()["development"]["development_plan"] == "NA"
+
+
+def test_missing_country_is_filled_before_first_submission_without_changing_history(
+    client, factory, setup_appraisal
+):
+    _, _, employee, appraisal, headers = setup_appraisal
+    path = f"/api/v1/appraisals/{appraisal['id']}"
+    with factory.begin() as db:
+        db.get(User, employee.id).country = "India"
+    assert client.get(path).json()["identity_snapshot"]["country"] == "India"
+    assert client.get(path).json()["submission_deadline"].endswith("+05:30")
+    saved = client.put(path + "/self-assessment", json=draft(), headers=headers)
+    assert saved.json()["started_at"].endswith("+05:30")
+    submitted = client.post(path + "/submit", json={"expected_version": 2}, headers=headers)
+    assert submitted.status_code == 200, submitted.text
+    assert submitted.json()["submitted_at"].endswith("+05:30")
+    with factory.begin() as db:
+        db.get(User, employee.id).country = "Canada"
+    assert client.get(path).json()["identity_snapshot"]["country"] == "India"
 
 
 @pytest.mark.parametrize("role", ["SUPER_ADMIN", "MANAGER", "EMPLOYEE"])

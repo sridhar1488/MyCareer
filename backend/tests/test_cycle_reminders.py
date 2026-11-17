@@ -1,4 +1,4 @@
-from datetime import UTC, timedelta
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock
 
 from sqlalchemy import select
@@ -95,6 +95,14 @@ def test_scheduled_reminders_use_each_deadline_and_skip_completed_work(
     }
     saved = client.put(endpoint, json=payload, headers=h)
     assert saved.status_code == 200 and saved.json()["hours_before"] == [72, 8]
+    for field, original in (
+        ("employee_deadline", employee_deadline),
+        ("manager_deadline", manager_deadline),
+        ("hr_deadline", hr_deadline),
+    ):
+        value = saved.json()[field]
+        assert value.endswith("+05:30")
+        assert datetime.fromisoformat(value) == original.replace(tzinfo=UTC)
     assert client.put(endpoint, json=payload, headers=h).status_code == 409
 
     queue_scheduled_reminders(factory, settings, now)
@@ -109,10 +117,12 @@ def test_scheduled_reminders_use_each_deadline_and_skip_completed_work(
     with factory() as db:
         messages = {message.subject: message.body for message in db.scalars(select(NotificationOutbox))}
         assert len(messages) == 3
-        for stage, email in [
-            ("self-assessments", employee.email),
-            ("manager reviews", manager.email),
-            ("HR calibrations", admin.email),
+        for stage, email, deadline in [
+            ("self-assessments", employee.email, employee_deadline),
+            ("manager reviews", manager.email, manager_deadline),
+            ("HR calibrations", admin.email, hr_deadline),
         ]:
             body = next(body for subject, body in messages.items() if stage in subject)
             assert email in body and f"Pending {stage}: 1." in body
+            local_deadline = deadline + timedelta(hours=5, minutes=30)
+            assert f"{local_deadline:%d %b %Y, %H:%M} IST" in body

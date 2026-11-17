@@ -15,6 +15,7 @@ from starlette.staticfiles import StaticFiles
 
 from app.core.config import Settings
 from app.core.errors import AppError, ErrorEnvelope, error_response
+from app.db.base import utcnow
 from app.db.session import make_engine, session_factory
 from app.modules.appraisals.router import router as appraisal_router
 from app.modules.auth.router import router as auth_router
@@ -108,6 +109,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         else:
             response = await call_next(request)
         response.headers["X-Request-ID"] = request.state.request_id
+        if deadline := getattr(request.state, "session_deadline", None):
+            if response.status_code != 401 and request.url.path != "/api/v1/auth/logout":
+                remaining = int((deadline - utcnow()).total_seconds() * 1000)
+                response.headers["X-Session-Remaining-Ms"] = str(max(0, remaining))
         response.headers["X-Content-Type-Options"] = "nosniff"
         inline_attachment = (
             request.url.path.startswith("/api/v1/appraisals/")
@@ -131,7 +136,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(AppError)
     async def app_error(request, exc):
-        return error_response(request, exc.status, exc.code, exc.message, headers=exc.headers)
+        return error_response(request, exc.status, exc.code, exc.message, exc.fields, headers=exc.headers)
 
     @app.exception_handler(RequestValidationError)
     async def validation_error(request, exc):

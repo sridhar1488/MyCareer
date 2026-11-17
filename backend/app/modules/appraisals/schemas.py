@@ -1,8 +1,10 @@
-from datetime import UTC, date, datetime
+from datetime import UTC, date
 
 from pydantic import AwareDatetime, BaseModel, Field, StrictInt, field_validator, model_validator
 
+from app.core.dates import IstDateTime
 from app.modules.auth.schemas import StrictInput
+from app.modules.forms.schemas import FormDefinition
 
 CYCLE_PARTICIPANT_LIMIT = 10_000
 
@@ -74,7 +76,7 @@ class CycleResponse(BaseModel):
     title: str
     period_start: date
     period_end: date
-    submission_deadline: datetime
+    submission_deadline: IstDateTime
     min_goals: int
     allow_late_submission: bool
     state: str
@@ -121,9 +123,10 @@ class AppraisalSummary(BaseModel):
     state: str
     version: int
     manager_name: str
-    submission_deadline: datetime
-    started_at: datetime | None
-    submitted_at: datetime | None
+    submission_deadline: IstDateTime
+    started_at: IstDateTime | None
+    submitted_at: IstDateTime | None
+    return_reason: str | None = None
 
 
 class AppraisalPage(BaseModel):
@@ -134,17 +137,16 @@ class AppraisalPage(BaseModel):
 
 
 class AppraisalResponse(AppraisalSummary):
-    last_draft_saved_at: AwareDatetime | None = None
+    last_draft_saved_at: IstDateTime | None = None
     identity_snapshot: dict
     content_revision: int
-    form_definition: dict
+    form_definition: FormDefinition
     min_goals: int
     allow_late_submission: bool
     goals: list[ItemInput]
     contributions: list[ItemInput]
     development: DevelopmentInput
     editable: bool
-    return_reason: str | None = None
 
 
 class HistoryRow(BaseModel):
@@ -153,7 +155,7 @@ class HistoryRow(BaseModel):
     from_state: str | None
     to_state: str
     reason: str | None
-    occurred_at: datetime
+    occurred_at: IstDateTime
 
 
 class HistoryPage(BaseModel):
@@ -165,7 +167,7 @@ class HistoryPage(BaseModel):
 
 class RevisionResponse(BaseModel):
     revision: int
-    submitted_at: datetime
+    submitted_at: IstDateTime
     responses: "EmployeeResponses"
 
 

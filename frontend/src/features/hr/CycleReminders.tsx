@@ -3,23 +3,17 @@ import { api } from '../../api/client';
 import type { components } from '../../api/schema';
 import { useApi } from '../../api/useApi';
 import { Feedback } from '../../components/Feedback';
-import { localDateTime } from '../../utils/dates';
+import { dateTimeInput, deadlineFromInput, localDateTime } from '../../utils/dates';
 
 type Settings = components['schemas']['ReminderSettingsResponse'];
 type Selection = components['schemas']['ReminderSelection'];
 type Preview = components['schemas']['ReminderPreview'];
 const offsets = [[168, '7 days'], [72, '3 days'], [24, '1 day'], [8, '8 hours']] as const;
 
-function localInput(value: string | null) {
-  if (!value) return '';
-  const date = new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : `${value}Z`);
-  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
-}
-
 function CycleReminderEditor({ endpoint, initial }: { endpoint: string; initial: Settings }) {
   const [settings, setSettings] = useState(initial);
-  const [manager, setManager] = useState(localInput(initial.manager_deadline));
-  const [hr, setHr] = useState(localInput(initial.hr_deadline));
+  const [manager, setManager] = useState(dateTimeInput(initial.manager_deadline));
+  const [hr, setHr] = useState(dateTimeInput(initial.hr_deadline));
   const [hours, setHours] = useState(initial.hours_before);
   const [stage, setStage] = useState<Selection['stage']>('employee');
   const [audience, setAudience] = useState<NonNullable<Selection['audience']>>('pending');
@@ -33,8 +27,8 @@ function CycleReminderEditor({ endpoint, initial }: { endpoint: string; initial:
     try {
       const saved = await api<Settings>(`${endpoint}/settings`, 'PUT', {
         expected_version: settings.version,
-        manager_deadline: manager ? new Date(manager).toISOString() : null,
-        hr_deadline: hr ? new Date(hr).toISOString() : null,
+        manager_deadline: manager ? deadlineFromInput(manager, settings.manager_deadline) : null,
+        hr_deadline: hr ? deadlineFromInput(hr, settings.hr_deadline) : null,
         hours_before: hours,
       });
       setSettings(saved); setPreview(null); setNotice('Reminder settings saved.');
@@ -71,10 +65,10 @@ function CycleReminderEditor({ endpoint, initial }: { endpoint: string; initial:
         <legend>Scheduled reminders</legend>
         <p>Employee submission deadline: {localDateTime(settings.employee_deadline)}</p>
         <div className="form-grid">
-          <label>Manager review deadline<input type="datetime-local" value={manager} onChange={e => setManager(e.target.value)} /></label>
-          <label>HR calibration deadline<input type="datetime-local" value={hr} onChange={e => setHr(e.target.value)} /></label>
+          <label>Manager review deadline<input type="datetime-local" aria-describedby="reminder-time-zone" value={manager} onChange={e => setManager(e.target.value)} /></label>
+          <label>HR calibration deadline<input type="datetime-local" aria-describedby="reminder-time-zone" value={hr} onChange={e => setHr(e.target.value)} /></label>
         </div>
-        <p className="muted">Dates use your local time zone. Manager and HR deadlines guide reminders. Scheduled emails go to people with work pending in active cycles.</p>
+        <p id="reminder-time-zone" className="muted">Deadlines use India Standard Time (IST, UTC+05:30). Scheduled emails go to people with work pending in active cycles.</p>
         <div className="action-bar">
           {offsets.map(([offset, label]) => <label className="choice" key={offset}>
             <input type="checkbox" checked={hours.includes(offset)} onChange={e => setHours(e.target.checked ? [...hours, offset] : hours.filter(value => value !== offset))} />{label} before each deadline

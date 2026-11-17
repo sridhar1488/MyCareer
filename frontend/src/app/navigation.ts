@@ -17,7 +17,7 @@ export const navigation = {
 
 export type Page = keyof typeof navigation;
 
-export type WorkspaceDestination = { page: Page; teamStatus: string };
+export type WorkspaceDestination = { page: Page; teamStatus: string; appraisalId?: string };
 
 export function workspaceDestination(defaultPage: Page = 'personal'): WorkspaceDestination {
   const params = new URLSearchParams(window.location.search);
@@ -26,14 +26,17 @@ export function workspaceDestination(defaultPage: Page = 'personal'): WorkspaceD
   const status = params.get('status') ?? '';
   const teamStatus = page === 'team' && ['SUBMITTED', 'UNDER_REVIEW', 'READY_FOR_RELEASE'].includes(status)
     ? status : '';
-  return { page, teamStatus };
+  const appraisalId = (page === 'personal' || page === 'team') ? params.get('id') ?? undefined : undefined;
+  return { page, teamStatus, appraisalId };
 }
 
-export function workspaceHref(page?: Page, teamStatus = '') {
+export function workspaceHref(page?: Page, teamStatus = '', appraisalId?: string) {
   const url = new URL(window.location.href);
   if (page) url.searchParams.set('view', page);
   else url.searchParams.delete('view');
   if (page === 'team' && teamStatus) url.searchParams.set('status', teamStatus);
   else url.searchParams.delete('status');
+  if (appraisalId && (page === 'personal' || page === 'team')) url.searchParams.set('id', appraisalId);
+  else url.searchParams.delete('id');
   return url.pathname + url.search;
 }

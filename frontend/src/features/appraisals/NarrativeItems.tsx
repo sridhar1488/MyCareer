@@ -10,10 +10,11 @@ export function narrativeStatus(item: Item): 'empty' | 'complete' | keyof Item {
   return item.employee_narrative.trim() ? 'description' : 'empty';
 }
 
-export function NarrativeItems({ title, singular, items, limit, disabled, onChange, textLimits, showErrors }: { title: string; singular: string; items: Item[]; limit: number; disabled: boolean; onChange: (items: Item[]) => void; textLimits?: Record<keyof Item, number>; showErrors?: boolean }) {
+export function NarrativeItems({ title, singular, items, limit, disabled, onChange, textLimits, showErrors, fieldErrors = {} }: { title: string; singular: string; items: Item[]; limit: number; disabled: boolean; onChange: (items: Item[]) => void; textLimits?: Record<keyof Item, number>; showErrors?: boolean; fieldErrors?: Record<string, string> }) {
   function update(index: number, key: keyof Item, value: string) { onChange(items.map((item,i) => i === index ? { ...item, [key]: value } : item)); }
   const limits = textLimits ?? defaultLimits;
   const isGoal = singular === 'Goal';
+  const hasBlankGoal = isGoal && items.some(item => narrativeStatus(item) === 'empty');
   const itemName = singular.toLowerCase();
   const addLabel = `Add ${itemName}`;
   const fields = [
@@ -27,18 +28,23 @@ export function NarrativeItems({ title, singular, items, limit, disabled, onChan
       return <fieldset className="narrative-item" key={index}><legend>{singular} {index + 1}</legend>
         {fields.map(({key, suffix, label, rows}) => {
           const id = `${singular}-${index}-${suffix}`;
-          const invalid = showErrors && narrativeStatus(item) === key;
+          const status = narrativeStatus(item);
+          const missing = status === key || (isGoal && status === 'empty');
+          const error = fieldErrors[`${isGoal ? 'goals' : 'contributions'}.${index}.${key}`] ||
+            (showErrors && missing ? key === 'employee_narrative'
+              ? 'Enter an achievement description or NA.'
+              : isGoal ? 'Enter a responsibility / goal description.' : 'Enter a contribution area.' : '');
+          const invalid = Boolean(error);
           return <div key={key}>
             <label htmlFor={id}>{label}</label>
-            {invalid && <small id={`${id}-error`} className="appraisal-field-error">{key === 'employee_narrative'
-              ? 'Enter an achievement description or NA.'
-              : isGoal ? 'Enter a goal title.' : 'Enter a contribution area.'}</small>}
+            {invalid && <small id={`${id}-error`} className="appraisal-field-error">{error}</small>}
             <CountedTextarea id={id} aria-invalid={invalid || undefined} aria-describedby={invalid ? `${id}-error` : undefined} rows={rows} maxLength={limits[key]} disabled={disabled} value={item[key]} onChange={e => update(index,key,e.target.value)} />
           </div>;
         })}
         {!disabled && <button
           className="button narrative-icon-button"
           type="button"
+          disabled={isGoal && items.length <= 1}
           aria-label={removeLabel}
           title={removeLabel}
           onClick={() => {
@@ -49,12 +55,14 @@ export function NarrativeItems({ title, singular, items, limit, disabled, onChan
         >−</button>}
       </fieldset>;
     })}
-    {!disabled && items.length < limit && <button
+    {!disabled && items.length < limit && <><button
       className="button narrative-icon-button"
       type="button"
       aria-label={addLabel}
       title={addLabel}
+      disabled={hasBlankGoal}
+      aria-describedby={hasBlankGoal ? 'blank-goal-hint' : undefined}
       onClick={() => onChange([...items, {description:'',employee_narrative:''}])}
-    >+</button>}
+    >+</button>{hasBlankGoal && <small id="blank-goal-hint" className="muted"> Start filling the blank goal before adding another.</small>}</>}
   </section>;
 }

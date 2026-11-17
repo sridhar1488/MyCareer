@@ -1,8 +1,9 @@
-from datetime import date, datetime
+from datetime import date
 from typing import Literal
 
 from pydantic import BaseModel, EmailStr, Field, SecretStr, StrictBool, field_validator
 
+from app.core.dates import IstDateTime
 from app.modules.auth.schemas import StrictInput
 from app.modules.users.models import RoleCode
 
@@ -63,7 +64,7 @@ class SetupLinkResponse(BaseModel):
     full_name: str
     email: str
     setup_url: str
-    expires_at: datetime
+    expires_at: IstDateTime
     email_status: Literal["queued", "test_only", "disabled"]
 
 
@@ -100,8 +101,8 @@ class DirectoryUser(BaseModel):
     manager_name: str | None
     active: bool
     version: int
-    created_at: datetime
-    last_login_at: datetime | None
+    created_at: IstDateTime
+    last_login_at: IstDateTime | None
 
 
 class DirectoryPage(BaseModel):
@@ -117,7 +118,7 @@ class AuditRow(BaseModel):
     action: str
     resource_id: str | None
     details: dict
-    occurred_at: datetime
+    occurred_at: IstDateTime
 
 
 class AuditPage(BaseModel):

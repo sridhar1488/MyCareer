@@ -20,9 +20,10 @@ class ErrorEnvelope(BaseModel):
 
 
 class AppError(Exception):
-    def __init__(self, status: int, code: str, message: str, headers: dict | None = None):
+    def __init__(self, status: int, code: str, message: str, headers: dict | None = None, *, fields=None):
         self.status, self.code, self.message = status, code, message
         self.headers = headers
+        self.fields = fields
 
 
 def error_response(request: Request, status: int, code: str, message: str, fields=None, headers=None):
