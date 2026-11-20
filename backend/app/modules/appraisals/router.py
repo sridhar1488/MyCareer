@@ -45,7 +45,7 @@ from app.modules.appraisals.schemas import (
 )
 from app.modules.audit.models import AuditEvent
 from app.modules.reviews import service as review_service
-from app.modules.reviews.schemas import AcknowledgeInput, ReleasedResult
+from app.modules.reviews.schemas import AcknowledgeInput, EmployeeReleasedResult
 from app.modules.users.models import OperatorGuard, RoleCode, User, UserRole
 
 router = APIRouter(tags=["Employee appraisals"])
@@ -341,7 +341,7 @@ def delete_attachment(
     return Response(status_code=204)
 
 
-@router.get("/appraisals/{appraisal_id}/released-result", response_model=ReleasedResult)
+@router.get("/appraisals/{appraisal_id}/released-result", response_model=EmployeeReleasedResult)
 def released_result(
     appraisal_id: str, actor: Identity = Depends(active_identity), db: Session = Depends(get_db)
 ):
@@ -350,7 +350,7 @@ def released_result(
 
 @router.post(
     "/appraisals/{appraisal_id}/acknowledge",
-    response_model=ReleasedResult,
+    response_model=EmployeeReleasedResult,
     dependencies=[Depends(active_identity)],
 )
 def acknowledge_result(

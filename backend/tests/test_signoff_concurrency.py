@@ -113,9 +113,13 @@ def test_release_once_and_acknowledgement_idempotent_under_concurrency(concurren
 
     with ThreadPoolExecutor(max_workers=2) as workers:
         responses = list(workers.map(acknowledge, range(2)))
-    assert all(r.status_code == 200 and r.json()["score"] == score for r in responses), [
-        (r.status_code, r.text) for r in responses
-    ]
+    assert all(
+        r.status_code == 200
+        and r.json()["overall_score"] == score["overall"]["display"]
+        and "score" not in r.json()
+        and "evaluation" not in r.json()
+        for r in responses
+    ), [(r.status_code, r.text) for r in responses]
     with app.state.sessions() as db:
         assert db.scalar(select(func.count()).select_from(Acknowledgement)) == 1
     for client in clients:

@@ -8,25 +8,30 @@ from app.core.errors import AppError
 from app.modules.appraisals.models import Appraisal, Cycle
 from app.modules.audit.models import AuditEvent
 from app.modules.hr import reports
-from app.modules.reviews.models import FinalEvaluation
+from app.modules.reviews.models import Acknowledgement, FinalEvaluation
 from app.modules.reviews.schemas import ReleasedResult
 from app.modules.reviews.service import final_result
+from app.modules.reviews.workflow import appraisal_stage
 from app.modules.users.models import RoleCode
 
 router = APIRouter(prefix="/hr/evaluations", tags=["HR final evaluations"])
 
 
 def records(db, actor, q="", cycle_id=None, manager_id=None, department="", status=None, appraisal_id=None):
-    values = db.execute(
+    query = (
         select(Appraisal, Cycle)
         .join(Cycle)
         .join(FinalEvaluation)
+        .outerjoin(Acknowledgement, Acknowledgement.appraisal_id == Appraisal.id)
         .where(
             Appraisal.state.in_(["HR_APPROVED", "RELEASED"]),
             or_(Appraisal.employee_id != actor.user.id, Appraisal.state == "RELEASED"),
         )
         .order_by(FinalEvaluation.finalized_at.desc(), Appraisal.id)
-    ).all()
+    )
+    if status:
+        query = query.where(appraisal_stage() == status)
+    values = db.execute(query).all()
     for appraisal, cycle in values:
         identity = appraisal.identity_snapshot
         if (
@@ -38,8 +43,6 @@ def records(db, actor, q="", cycle_id=None, manager_id=None, department="", stat
             and appraisal.manager_id != manager_id
             or department
             and identity.get("department", "").casefold() != department.casefold()
-            or status
-            and appraisal.state != status
         ):
             continue
         if (
@@ -59,7 +62,7 @@ def listing(
     cycle_id: str | None = None,
     manager_id: str | None = None,
     department: str = Query("", max_length=100),
-    status: str | None = Query(None, pattern="^(HR_APPROVED|RELEASED)$"),
+    status: str | None = Query(None, pattern="^(HR_APPROVED|RELEASED|ACKNOWLEDGED)$"),
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     actor: Identity = Depends(require_role(RoleCode.SUPER_ADMIN)),
@@ -73,6 +76,9 @@ def listing(
                 "cycle": c.title,
                 "identity": a.identity_snapshot,
                 "state": a.state,
+                "acknowledged_at": as_ist(db.get(Acknowledgement, a.id).acknowledged_at)
+                if db.get(Acknowledgement, a.id)
+                else None,
                 "finalized_at": as_ist(db.get(FinalEvaluation, a.id).finalized_at),
             }
             for a, c in values[(page - 1) * page_size : page * page_size]
@@ -90,7 +96,7 @@ def export(
     cycle_id: str | None = None,
     manager_id: str | None = None,
     department: str = Query("", max_length=100),
-    status: str | None = Query(None, pattern="^(HR_APPROVED|RELEASED)$"),
+    status: str | None = Query(None, pattern="^(HR_APPROVED|RELEASED|ACKNOWLEDGED)$"),
     appraisal_id: str | None = None,
     actor: Identity = Depends(require_role(RoleCode.SUPER_ADMIN)),
     db: Session = Depends(get_db),

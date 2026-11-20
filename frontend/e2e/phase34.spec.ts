@@ -255,11 +255,11 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
     const bounds = element.getBoundingClientRect();
     return {
       top: bounds.top,
-      centerOffset: Math.abs(bounds.left + bounds.width / 2 - document.documentElement.clientWidth / 2),
+      rightOffset: document.documentElement.clientWidth - bounds.right,
     };
   });
   expect(toastPosition.top).toBeCloseTo(16);
-  expect(toastPosition.centerOffset).toBeLessThanOrEqual(1);
+  expect(toastPosition.rightOffset).toBeCloseTo(16);
   await expect(draftSave).toBeDisabled();
   expect(draftWrites).toBe(2);
   await expect(lastDraftSave).toHaveAttribute('datetime', /\+05:30$/);
@@ -357,6 +357,7 @@ test('HR creates an employee and cycle; employee saves extra goals, reviews and 
   await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: 'View workflow history', exact: true }).click();
   await expect(page.getByText('Draft → Submitted', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Hide workflow history', exact: true })).toHaveAttribute('aria-expanded', 'true');
   for (const name of ['Previous', 'Next']) {
     const button = page.getByRole('button', { name, exact: true });
     await expect(button).toBeDisabled();

@@ -160,7 +160,7 @@ def excel(records):
                 identity.get("employee_name", ""),
                 identity.get("department", ""),
                 identity.get("manager_name", ""),
-                appraisal.state,
+                "ACKNOWLEDGED" if result.acknowledged_at else appraisal.state,
                 as_ist(result.finalized_at).replace(tzinfo=None),
                 float(result.score.overall.display),
             ]

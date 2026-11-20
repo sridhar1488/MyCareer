@@ -126,6 +126,7 @@ class AppraisalSummary(BaseModel):
     submission_deadline: IstDateTime
     started_at: IstDateTime | None
     submitted_at: IstDateTime | None
+    acknowledged_at: IstDateTime | None = None
     return_reason: str | None = None
 
 

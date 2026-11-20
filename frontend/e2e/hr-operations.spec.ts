@@ -111,6 +111,14 @@ test('HR publishes a form and uses the calibration grid to download, override an
  await row.getByRole('button',{name:'Review and calibrate',exact:true}).click();
  await expect(page.getByRole('heading',{name:'Manager narrative',exact:true})).toBeVisible();
  await expect(page.getByText('Strengths: Delivered customer improvements.',{exact:true}).first()).toBeVisible();
+ const calibrationRating = page.getByLabel('Rating', {exact:true}).first();
+ const originalRating = await calibrationRating.inputValue();
+ await calibrationRating.selectOption(originalRating === '5' ? '4' : '5');
+ await page.getByRole('button', {name:'Save calibration', exact:true}).click();
+ const calibrationReason = page.getByLabel('Reason for calibration (required when you change ratings)', {exact:true});
+ await expect(calibrationReason).toBeFocused();
+ await expect(calibrationReason).toHaveAttribute('aria-invalid', 'true');
+ await expect(page.getByText('Add a reason for the rating calibration.', {exact:true})).toBeInViewport();
  await page.getByRole('button',{name:'Back to calibration queue',exact:true}).click();
  await row.getByRole('button',{name:'Override score',exact:true}).click();
  await row.getByLabel('Overall score').fill('4.2');

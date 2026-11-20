@@ -87,11 +87,15 @@ export function ManagerReview({initial,onBack,userId}: {initial:Review;onBack:()
         action === 'release' ? 'Evaluation released to the employee.' :
         action === 'return' ? 'Appraisal returned. The employee can revise their responses.' :
         action === 'begin' ? 'Review started.' : 'Manager review draft saved.');
+      if (action !== 'review') {
+        assessmentStart.current?.scrollIntoView({ block: 'start' });
+        assessmentStart.current?.focus({ preventScroll: true });
+      }
     }
     catch(e){setError((e as Error).message);}finally{setBusy(false);}
   }
   async function loadHistory(page=1) {setError('');try{setHistory(await api(`/manager/appraisals/${a.id}/review-history?page=${page}`));setHistoryPage(page);}catch(e){setError((e as Error).message);}}
-  return <div ref={reviewForm}><div className="action-bar assessment-start"><button ref={assessmentStart} className="button" disabled={busy} onClick={onBack}>Back to team appraisals</button><span className="status">{statusLabel(a.state)}</span>{pendingEdits && <span role="status">Unsaved review input</span>}</div>
+  return <div ref={reviewForm}><div className="action-bar assessment-start"><button ref={assessmentStart} className="button" disabled={busy} onClick={onBack}>Back to team appraisals</button><span className="status">{statusLabel(data.final_result?.acknowledged_at ? 'ACKNOWLEDGED' : a.state)}</span>{pendingEdits && <span role="status">Unsaved review input</span>}</div>
     <section className="panel"><h2>{String(a.identity_snapshot.employee_name)} · {cycleLabel(a.cycle_title)}</h2><p className="muted">Submitted revision {data.submitted_revision} · {localDateTime(a.submitted_at)}</p><p>Employee responses below are the preserved submission.{editable && ' Use Return for revision to request changes.'}</p></section>
     {!editable && error && <Feedback message={error} />}{!editable && notice && <Feedback message={notice} success />}
     {previousCopy && <section className="panel"><h3>Recovered input from revision {previousCopy.revision}</h3>

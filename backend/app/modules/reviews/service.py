@@ -20,7 +20,12 @@ from app.modules.reviews.models import (
     ReviewDraft,
     ReviewEvent,
 )
-from app.modules.reviews.schemas import EvaluationInput, ReleasedResult, ReviewResponse
+from app.modules.reviews.schemas import (
+    EmployeeReleasedResult,
+    EvaluationInput,
+    ReleasedResult,
+    ReviewResponse,
+)
 from app.modules.users.models import RoleCode, User
 
 REVIEWABLE = {"SUBMITTED", "UNDER_REVIEW"}
@@ -88,8 +93,10 @@ def final_result(db, appraisal_id, lock=False):
         return None
     release = db.get(Release, appraisal_id, with_for_update=lock, populate_existing=lock)
     acknowledgement = db.get(Acknowledgement, appraisal_id, with_for_update=lock, populate_existing=lock)
+    appraisal = db.get(Appraisal, appraisal_id)
     return ReleasedResult(
-        appraisal_version=db.get(Appraisal, appraisal_id).version,
+        appraisal_version=appraisal.version,
+        cycle_title=db.get(Cycle, appraisal.cycle_id).title,
         submitted_revision=final.submitted_revision,
         identity_snapshot=final.employee_snapshot["identity"],
         form_definition=final.employee_snapshot["form_definition"],
@@ -432,7 +439,7 @@ def release(db, appraisal, data, actor):
         db,
         settings,
         f"Your evaluation is available: {cycle.title}",
-        f"Hello {employee.full_name},\n\nYour manager has released your HR-approved evaluation for {cycle.title}. Sign in to MyCareer to view it: {base_url}",
+        f"Hello {employee.full_name},\n\nYour final evaluation for {cycle.title} is available. Sign in to MyCareer to view it: {base_url}",
         [employee.email],
     )
     db.commit()
@@ -447,7 +454,52 @@ def released_to_owner(db, appraisal, lock=False):
     result = final_result(db, appraisal.id, lock=lock)
     if not result:
         raise AppError(404, "NOT_RELEASED", "The evaluation has not been released to you.")
-    return result
+    config = config_for(result.form_definition)
+    feedback = []
+    for key, label in [("goals", "Goal"), ("contributions", "Contribution"), ("competencies", "")]:
+        ratings = getattr(result.evaluation, key)
+        if not ratings:
+            continue
+        items = []
+        for index, entry in enumerate(ratings):
+            item_label = (
+                config.competencies[index].label.rstrip(": ")
+                if key == "competencies" and index < len(config.competencies)
+                else f"{label} {index + 1}".strip()
+            )
+            items.append({"label": item_label, "comment": entry.comment})
+        feedback.append({"title": getattr(config, f"{key}_title"), "items": items})
+    for section in config.text_sections:
+        if section.owner == "MANAGER":
+            feedback.append(
+                {
+                    "title": section.title,
+                    "items": [
+                        {
+                            "label": question.label,
+                            "comment": result.evaluation.extra_answers.get(question.id, ""),
+                        }
+                        for question in section.questions
+                    ],
+                }
+            )
+    feedback.append(
+        {
+            "title": "Overall feedback",
+            "items": [
+                {"label": "Strengths", "comment": result.evaluation.strengths},
+                {"label": "Improvements", "comment": result.evaluation.improvements},
+            ],
+        }
+    )
+    return EmployeeReleasedResult(
+        appraisal_version=result.appraisal_version,
+        cycle_title=result.cycle_title,
+        overall_score=result.score.overall.display,
+        feedback=feedback,
+        released_at=result.released_at,
+        acknowledged_at=result.acknowledged_at,
+    )
 
 
 def acknowledge(db, appraisal_id, data, actor):

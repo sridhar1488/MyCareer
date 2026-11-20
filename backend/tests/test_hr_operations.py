@@ -145,6 +145,9 @@ def test_approved_report_access_and_own_privacy(client, signin, submitted_review
     response = client.get(f"/api/v1/hr/evaluations/{identifier}")
     assert response.status_code == 200, response.text
     assert response.json()["score"] == expected
+    assert response.json()["cycle_title"] == review["appraisal"]["cycle_title"]
+    assert response.json()["identity_snapshot"]["employee_id"] == employee.employee_id
+    assert response.json()["identity_snapshot"]["manager_name"] == manager.full_name
     assert response.json()["finalized_at"].endswith("+05:30")
     approved_at = datetime.fromisoformat(response.json()["finalized_at"]).replace(tzinfo=None)
     assert client.get("/api/v1/hr/evaluations").json()["total"] == 1
@@ -272,7 +275,7 @@ def test_calibration_grid_export_and_overall_override(client, signin, submitted_
     assert client.get(queue, params={"page": 2, "page_size": 1}).json()["items"] == []
 
     version = {"expected_version": row["version"], "submitted_revision": row["submitted_revision"]}
-    for invalid in ("-0.1", "5.1", "4.27"):
+    for invalid in ("-0.1", "0", "0.9", "5.1", "4.27"):
         assert (
             client.put(
                 path + "/overall-score",
@@ -417,7 +420,11 @@ def test_calibration_grid_export_and_overall_override(client, signin, submitted_
     )
     headers(signin, employee)
     result = client.get(f"/api/v1/appraisals/{appraisal_id}/released-result").json()
-    assert result["score"] == calibrated["score_preview"]
+    assert result["overall_score"] == calibrated["score_preview"]["overall"]["display"]
+    assert "calculated_overall" not in result and "score" not in result and "evaluation" not in result
+    assert all(
+        set(item) == {"label", "comment"} for section in result["feedback"] for item in section["items"]
+    )
 
 
 def test_bulk_preview_confirm_and_replay(client, signin, user_factory, factory):

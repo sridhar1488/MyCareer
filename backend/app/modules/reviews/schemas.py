@@ -93,6 +93,7 @@ class TeamRow(BaseModel):
     version: int
     submitted_revision: int
     submitted_at: IstDateTime | None
+    acknowledged_at: IstDateTime | None = None
     submission_deadline: IstDateTime
 
 
@@ -122,6 +123,7 @@ class ReviewEventPage(BaseModel):
 
 class ReleasedResult(BaseModel):
     appraisal_version: int
+    cycle_title: str
     submitted_revision: int
     identity_snapshot: dict
     form_definition: FormDefinition
@@ -131,6 +133,25 @@ class ReleasedResult(BaseModel):
     policy: dict
     finalized_at: IstDateTime
     released_at: IstDateTime | None
+    acknowledged_at: IstDateTime | None
+
+
+class EmployeeFeedbackItem(BaseModel):
+    label: str
+    comment: str
+
+
+class EmployeeFeedbackSection(BaseModel):
+    title: str
+    items: list[EmployeeFeedbackItem]
+
+
+class EmployeeReleasedResult(BaseModel):
+    appraisal_version: int
+    cycle_title: str
+    overall_score: str
+    feedback: list[EmployeeFeedbackSection]
+    released_at: IstDateTime
     acknowledged_at: IstDateTime | None
 
 

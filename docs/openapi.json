@@ -3532,7 +3532,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleasedResult"
+                  "$ref": "#/components/schemas/EmployeeReleasedResult"
                 }
               }
             }
@@ -3669,7 +3669,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ReleasedResult"
+                  "$ref": "#/components/schemas/EmployeeReleasedResult"
                 }
               }
             }
@@ -9207,7 +9207,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "pattern": "^(HR_APPROVED|RELEASED)$"
+                  "pattern": "^(HR_APPROVED|RELEASED|ACKNOWLEDGED)$"
                 },
                 {
                   "type": "null"
@@ -9426,7 +9426,7 @@
               "anyOf": [
                 {
                   "type": "string",
-                  "pattern": "^(HR_APPROVED|RELEASED)$"
+                  "pattern": "^(HR_APPROVED|RELEASED|ACKNOWLEDGED)$"
                 },
                 {
                   "type": "null"
@@ -10851,6 +10851,18 @@
             ],
             "title": "Submitted At"
           },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          },
           "return_reason": {
             "anyOf": [
               {
@@ -11007,6 +11019,18 @@
               }
             ],
             "title": "Submitted At"
+          },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
           },
           "return_reason": {
             "anyOf": [
@@ -12055,6 +12079,95 @@
         ],
         "title": "EditUser"
       },
+      "EmployeeFeedbackItem": {
+        "properties": {
+          "label": {
+            "type": "string",
+            "title": "Label"
+          },
+          "comment": {
+            "type": "string",
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "label",
+          "comment"
+        ],
+        "title": "EmployeeFeedbackItem"
+      },
+      "EmployeeFeedbackSection": {
+        "properties": {
+          "title": {
+            "type": "string",
+            "title": "Title"
+          },
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeFeedbackItem"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "title",
+          "items"
+        ],
+        "title": "EmployeeFeedbackSection"
+      },
+      "EmployeeReleasedResult": {
+        "properties": {
+          "appraisal_version": {
+            "type": "integer",
+            "title": "Appraisal Version"
+          },
+          "cycle_title": {
+            "type": "string",
+            "title": "Cycle Title"
+          },
+          "overall_score": {
+            "type": "string",
+            "title": "Overall Score"
+          },
+          "feedback": {
+            "items": {
+              "$ref": "#/components/schemas/EmployeeFeedbackSection"
+            },
+            "type": "array",
+            "title": "Feedback"
+          },
+          "released_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Released At"
+          },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "appraisal_version",
+          "cycle_title",
+          "overall_score",
+          "feedback",
+          "released_at",
+          "acknowledged_at"
+        ],
+        "title": "EmployeeReleasedResult"
+      },
       "EmployeeResponses": {
         "properties": {
           "goals": {
@@ -12989,7 +13102,7 @@
               {
                 "type": "number",
                 "maximum": 5.0,
-                "minimum": 0.0
+                "minimum": 1.0
               },
               {
                 "type": "string"
@@ -13207,6 +13320,10 @@
             "type": "integer",
             "title": "Appraisal Version"
           },
+          "cycle_title": {
+            "type": "string",
+            "title": "Cycle Title"
+          },
           "submitted_revision": {
             "type": "integer",
             "title": "Submitted Revision"
@@ -13268,6 +13385,7 @@
         "type": "object",
         "required": [
           "appraisal_version",
+          "cycle_title",
           "submitted_revision",
           "identity_snapshot",
           "form_definition",
@@ -14289,6 +14407,18 @@
               }
             ],
             "title": "Submitted At"
+          },
+          "acknowledged_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Acknowledged At"
           },
           "submission_deadline": {
             "type": "string",

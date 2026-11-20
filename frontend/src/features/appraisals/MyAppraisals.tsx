@@ -20,7 +20,7 @@ export function MyAppraisals({ welcomeName, appraisalId, onOpen, profileCountry,
   return <>
     {welcomeName && <WelcomeBanner name={welcomeName} message="View your assigned appraisal cycles and continue your self-assessment." />}
     {loadError && <Feedback message={loadError} />}<section className="panel"><div className="section-heading"><h2>Your appraisal cycles</h2><button className="button small" onClick={() => setRevision(revision+1)}>Refresh</button></div>
-    {!data && !loadError && <p role="status">Loading appraisals…</p>}{data?.items.map(a => <article className="appraisal-card" key={a.id}><div><span className="status">{statusLabel(a.state === 'DRAFT' && !a.started_at ? 'NOT_STARTED' : a.state)}</span><h3>{cycleLabel(a.cycle_title)}</h3><p className="muted">
+    {!data && !loadError && <p role="status">Loading appraisals…</p>}{data?.items.map(a => <article className="appraisal-card" key={a.id}><div><span className="status">{statusLabel(a.acknowledged_at ? 'ACKNOWLEDGED' : a.state === 'DRAFT' && !a.started_at ? 'NOT_STARTED' : a.state)}</span><h3>{cycleLabel(a.cycle_title)}</h3><p className="muted">
       Appraisal period: {appraisalPeriod(a.period_start, a.period_end)}<br />
       Assigned reviewer: {a.manager_name}<br />
       Deadline: {localDateTime(a.submission_deadline)}{a.submitted_at && <><br />Submitted: {localDateTime(a.submitted_at)}</>}

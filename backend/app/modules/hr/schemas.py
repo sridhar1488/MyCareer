@@ -9,7 +9,7 @@ from app.modules.reviews.schemas import ReviewCommand
 
 
 class OverallScoreOverride(ReviewCommand):
-    score: Annotated[Decimal, Field(ge=0, le=5, decimal_places=1)] | None
+    score: Annotated[Decimal, Field(ge=1, le=5, decimal_places=1)] | None
     reason: ResponseText = Field(min_length=TEXT_MINIMUM)
 
 

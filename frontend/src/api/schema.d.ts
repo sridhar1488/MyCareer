@@ -1259,6 +1259,8 @@ export interface components {
             started_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
             /** Return Reason */
             return_reason?: string | null;
             /** Last Draft Saved At */
@@ -1318,6 +1320,8 @@ export interface components {
             started_at: string | null;
             /** Submitted At */
             submitted_at: string | null;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
             /** Return Reason */
             return_reason?: string | null;
         };
@@ -1743,6 +1747,38 @@ export interface components {
             date_joined?: string | null;
             /** Expected Version */
             expected_version: number;
+        };
+        /** EmployeeFeedbackItem */
+        EmployeeFeedbackItem: {
+            /** Label */
+            label: string;
+            /** Comment */
+            comment: string;
+        };
+        /** EmployeeFeedbackSection */
+        EmployeeFeedbackSection: {
+            /** Title */
+            title: string;
+            /** Items */
+            items: components["schemas"]["EmployeeFeedbackItem"][];
+        };
+        /** EmployeeReleasedResult */
+        EmployeeReleasedResult: {
+            /** Appraisal Version */
+            appraisal_version: number;
+            /** Cycle Title */
+            cycle_title: string;
+            /** Overall Score */
+            overall_score: string;
+            /** Feedback */
+            feedback: components["schemas"]["EmployeeFeedbackSection"][];
+            /**
+             * Released At
+             * Format: date-time
+             */
+            released_at: string;
+            /** Acknowledged At */
+            acknowledged_at: string | null;
         };
         /** EmployeeResponses */
         EmployeeResponses: {
@@ -2179,6 +2215,8 @@ export interface components {
         ReleasedResult: {
             /** Appraisal Version */
             appraisal_version: number;
+            /** Cycle Title */
+            cycle_title: string;
             /** Submitted Revision */
             submitted_revision: number;
             /** Identity Snapshot */
@@ -2570,6 +2608,8 @@ export interface components {
             submitted_revision: number;
             /** Submitted At */
             submitted_at: string | null;
+            /** Acknowledged At */
+            acknowledged_at?: string | null;
             /**
              * Submission Deadline
              * Format: date-time
@@ -5530,7 +5570,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleasedResult"];
+                    "application/json": components["schemas"]["EmployeeReleasedResult"];
                 };
             };
             /** @description Bad Request */
@@ -5637,7 +5677,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ReleasedResult"];
+                    "application/json": components["schemas"]["EmployeeReleasedResult"];
                 };
             };
             /** @description Bad Request */

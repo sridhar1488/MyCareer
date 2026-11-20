@@ -85,6 +85,7 @@ def assigned_appraisals(
     items = []
     for a in appraisals:
         cycle = db.get(Cycle, a.cycle_id)
+        acknowledgement = db.get(Acknowledgement, a.id)
         items.append(
             TeamRow(
                 id=a.id,
@@ -96,6 +97,7 @@ def assigned_appraisals(
                 version=a.version,
                 submitted_revision=a.content_revision,
                 submitted_at=a.submitted_at,
+                acknowledged_at=acknowledgement.acknowledged_at if acknowledgement else None,
                 submission_deadline=cycle.submission_deadline,
             )
         )

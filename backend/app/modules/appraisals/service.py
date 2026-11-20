@@ -38,6 +38,7 @@ from app.modules.forms.text_limits import (
     validate_text_change,
 )
 from app.modules.notifications.service import enqueue as enqueue_email
+from app.modules.reviews.models import Acknowledgement
 from app.modules.users.models import RoleCode, User
 
 FORM_VERSION = "workbook-ye2025-v1"
@@ -196,6 +197,7 @@ def owned(db, appraisal_id, actor, write=False, expected_version=None):
 
 def summary(db, appraisal):
     cycle = db.get(Cycle, appraisal.cycle_id)
+    acknowledgement = db.get(Acknowledgement, appraisal.id)
     return_reason = None
     if appraisal.state == "RETURNED_FOR_REVISION":
         return_reason = db.scalar(
@@ -219,6 +221,7 @@ def summary(db, appraisal):
         submission_deadline=cycle.submission_deadline,
         started_at=appraisal.started_at,
         submitted_at=appraisal.submitted_at,
+        acknowledged_at=acknowledgement.acknowledged_at if acknowledgement else None,
         return_reason=return_reason,
     )
 

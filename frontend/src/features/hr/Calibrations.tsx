@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react';
+import { useRef, useState, type FormEvent } from 'react';
 import type { components } from '../../api/schema';
 import { CountedTextarea } from '../../components/CountedTextarea';
 import { appraisalResponseLimit, isSingleCharacter } from '../../utils/appraisalTextLimits';
@@ -34,6 +34,8 @@ export function Calibrations() {
   const [detail, setDetail] = useState<Calibration | null>(null);
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [reason, setReason] = useState('');
+  const reasonPanel = useRef<HTMLElement>(null);
+  const [reasonError, setReasonError] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -73,13 +75,28 @@ export function Calibrations() {
     setBusy(true); setError('');
     try {
       const result = await api<Calibration>(`/hr/calibrations/${id}`);
-      setDetail(result); setEvaluation(result.evaluation); setReason('');
+      setDetail(result); setEvaluation(result.evaluation); setReason(''); setReasonError('');
     } catch (e) { setError((e as Error).message); }
     finally { setBusy(false); }
   }
 
   async function save() {
     if (!detail || !evaluation) return;
+    const ratingsChanged = (['goals', 'contributions', 'competencies'] as const).some(section =>
+      evaluation[section].some((entry, index) => {
+        const original = detail.manager_evaluation[section][index];
+        return entry.rating !== original?.rating || entry.not_applicable !== original?.not_applicable
+          || entry.applicability_reason !== original?.applicability_reason;
+      }),
+    );
+    if (ratingsChanged && !reason.trim()) {
+      setReasonError('Add a reason for the rating calibration.');
+      const field = reasonPanel.current?.querySelector<HTMLTextAreaElement>('textarea');
+      field?.scrollIntoView({ block: 'center' });
+      field?.focus({ preventScroll: true });
+      return;
+    }
+    setReasonError('');
     setBusy(true); setError(''); setNotice('');
     try {
       const result = await api<Calibration>(`/hr/calibrations/${detail.id}`, 'PUT', {
@@ -126,7 +143,7 @@ export function Calibrations() {
           <td><strong>{row.calibrated_overall}</strong>
             {row.calculated_overall != null && <small>HR override · Calculated {row.calculated_overall}</small>}
             {override?.row.id === row.id ? <form className="calibration-override" onSubmit={saveOverride}>
-              <label>Overall score<input type="number" min={0} max={5} step={0.1} required={row.calculated_overall == null} disabled={busy} value={override.score} onChange={e => setOverride({...override, score: e.target.value})} /></label>
+              <label>Overall score<input type="number" min={1} max={5} step={0.1} required={row.calculated_overall == null} disabled={busy} value={override.score} onChange={e => setOverride({...override, score: e.target.value})} /></label>
               {row.calculated_overall != null && <small>Clear the score to restore the calculated value.</small>}
               <label htmlFor="override-reason">Reason</label><CountedTextarea id="override-reason" rows={3} required maxLength={appraisalResponseLimit} disabled={busy} value={override.reason} onChange={e => setOverride({...override, reason: e.target.value})} />
               <div className="action-bar"><button className="button small primary" disabled={busy || !override.reason.trim() || isSingleCharacter(override.reason)}>Save score</button><button className="button small" type="button" disabled={busy} onClick={() => setOverride(null)}>Cancel</button></div>
@@ -177,7 +194,8 @@ export function Calibrations() {
     </div>)}</section>}
     <section className="panel"><h2>Manager narrative</h2><ReviewHistoryEntry evaluation={detail.manager_evaluation} competencies={competencyLabels} definition={definition} /></section>
     <ScoreSummary score={detail.score_preview} />
-    <section className="panel"><p>Save your changes to recalculate the score preview.</p><label htmlFor="calibration-reason">Reason for calibration (required when you change ratings)</label><CountedTextarea id="calibration-reason" rows={4} maxLength={appraisalResponseLimit} value={reason} disabled={busy} onChange={e => setReason(e.target.value)} />
+    <section ref={reasonPanel} className="panel"><p>Save your changes to recalculate the score preview.</p><label htmlFor="calibration-reason">Reason for calibration (required when you change ratings)</label><CountedTextarea id="calibration-reason" rows={4} maxLength={appraisalResponseLimit} value={reason} disabled={busy} aria-invalid={Boolean(reasonError)} aria-describedby={reasonError ? 'calibration-reason-error' : undefined} onChange={e => {setReason(e.target.value);setReasonError('');}} />
+      {reasonError && <p id="calibration-reason-error" role="alert" className="appraisal-field-error">{reasonError}</p>}
       <div className="action-bar"><button className="button" disabled={busy || isSingleCharacter(reason)} onClick={() => void save()}>Save calibration</button><button className="button primary" disabled={busy || evaluationChanged} onClick={() => { if (window.confirm('Approve this final score? The manager will be able to release it to the employee.')) void approve(detail); }}>Approve for manager release</button></div>
     </section>
     <section className="panel"><h2>Manager’s original submitted evaluation</h2><ReviewHistoryEntry evaluation={detail.manager_evaluation} competencies={competencyLabels} definition={definition} /><ScoreSummary score={detail.manager_score} /></section>

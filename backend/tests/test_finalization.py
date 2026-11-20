@@ -4,6 +4,7 @@ from sqlalchemy.exc import DatabaseError
 
 from app.modules.appraisals.models import Cycle
 from app.modules.reviews.models import FinalEvaluation
+from app.modules.users.models import UserRole
 from tests.test_directory_appraisals import headers
 from tests.test_directory_appraisals import setup_appraisal as setup_appraisal
 from tests.test_manager_reviews import save_body
@@ -71,8 +72,15 @@ def approve_in_hr(client, signin, admin, appraisal_id):
     return response.json()
 
 
-def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, submitted_review, factory):
+@pytest.mark.parametrize("personal_role", ["EMPLOYEE", "MANAGER", "SUPER_ADMIN"])
+def test_finalize_release_acknowledge_and_immutable_artifacts(
+    client, signin, submitted_review, factory, personal_role
+):
     admin, manager, employee, review, h = submitted_review
+    if personal_role != "EMPLOYEE":
+        with factory.begin() as db:
+            db.query(UserRole).filter(UserRole.user_id == employee.id).delete()
+            db.add(UserRole(user_id=employee.id, role_code=personal_role))
     identifier = review["appraisal"]["id"]
     path = f"/api/v1/manager/appraisals/{identifier}"
     own = f"/api/v1/appraisals/{identifier}"
@@ -138,15 +146,56 @@ def test_finalize_release_acknowledge_and_immutable_artifacts(client, signin, su
     )
     eh = headers(signin, employee)
     result = client.get(own + "/released-result").json()
-    assert result["score"] == score and result["released_at"] and not result["acknowledged_at"]
+    assert result["overall_score"] == score["overall"]["display"]
+    assert result["released_at"] and not result["acknowledged_at"]
+    assert set(result) == {
+        "appraisal_version",
+        "cycle_title",
+        "overall_score",
+        "feedback",
+        "released_at",
+        "acknowledged_at",
+    }
+    assert all(
+        set(item) == {"label", "comment"} for section in result["feedback"] for item in section["items"]
+    )
     ack = client.post(
         own + "/acknowledge", json={"expected_version": result["appraisal_version"]}, headers=eh
     )
-    assert ack.status_code == 200 and ack.json()["acknowledged_at"] and ack.json()["score"] == score
+    assert ack.status_code == 200 and ack.json()["acknowledged_at"]
+    assert ack.json()["overall_score"] == result["overall_score"]
+    assert set(ack.json()) == set(result)
+    assert client.get(own).json()["acknowledged_at"] == ack.json()["acknowledged_at"]
+    personal_row = next(
+        row for row in client.get("/api/v1/me/appraisals").json()["items"] if row["id"] == identifier
+    )
+    assert personal_row["acknowledged_at"] == ack.json()["acknowledged_at"]
     repeated = client.post(
         own + "/acknowledge", json={"expected_version": result["appraisal_version"]}, headers=eh
     )
     assert repeated.json()["acknowledged_at"] == ack.json()["acknowledged_at"]
+    admin_headers = headers(signin, admin)
+    acknowledged_query = {"status": "ACKNOWLEDGED", "cycle_id": cycle_id}
+    hr_rows = client.get("/api/v1/hr/evaluations", params=acknowledged_query).json()
+    assert [row["id"] for row in hr_rows["items"]] == [identifier]
+    assert hr_rows["items"][0]["acknowledged_at"] == ack.json()["acknowledged_at"]
+    assert (
+        client.get("/api/v1/hr/evaluations", params={"status": "RELEASED", "cycle_id": cycle_id}).json()[
+            "total"
+        ]
+        == 0
+    )
+    assert (
+        client.get(
+            "/api/v1/hr/evaluations/export/xlsx", params=acknowledged_query, headers=admin_headers
+        ).status_code
+        == 200
+    )
+    headers(signin, manager)
+    team_row = next(
+        row for row in client.get("/api/v1/manager/appraisals").json()["items"] if row["id"] == identifier
+    )
+    assert team_row["acknowledged_at"] == ack.json()["acknowledged_at"]
     for table in [
         "final_evaluations",
         "appraisal_releases",
@@ -205,7 +254,8 @@ def test_approved_results_do_not_recalculate_when_policy_registry_changes(
     assert released.status_code == 200 and released.json()["final_result"]["score"] == score
     headers(signin, employee)
     assert (
-        client.get(f"/api/v1/appraisals/{review['appraisal']['id']}/released-result").json()["score"] == score
+        client.get(f"/api/v1/appraisals/{review['appraisal']['id']}/released-result").json()["overall_score"]
+        == score["overall"]["display"]
     )
 
 
