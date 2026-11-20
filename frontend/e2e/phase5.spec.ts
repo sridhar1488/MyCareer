@@ -209,8 +209,8 @@ test('assigned manager saves review, returns with reason and reviews a fresh res
   await expect(page.locator('.appraisal-card').filter({hasText:cycle.title}).locator('.status')).toHaveText('Acknowledged');
   await apiLogin('admin.e2e@example.org');
   await page.goto('/?view=reports');
-  await page.getByLabel('Cycle', {exact:true}).selectOption(cycle.id);
-  await page.getByLabel('Status', {exact:true}).selectOption('ACKNOWLEDGED');
+  await page.getByRole('combobox', {name:'Cycle',exact:true}).selectOption(cycle.id);
+  await page.getByRole('combobox', {name:'Status',exact:true}).selectOption('ACKNOWLEDGED');
   const acknowledgedRow = page.getByRole('row').filter({hasText:employee.full_name});
   await expect(acknowledgedRow).toContainText('Acknowledged');
   await acknowledgedRow.getByRole('button', {name:'View final evaluation',exact:true}).click();
