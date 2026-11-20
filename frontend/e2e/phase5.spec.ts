@@ -216,5 +216,5 @@ test('assigned manager saves review, returns with reason and reviews a fresh res
   await acknowledgedRow.getByRole('button', {name:'View final evaluation',exact:true}).click();
   await expect(page.getByText(cycle.title, {exact:true})).toBeVisible();
   await expect(page.getByText(new RegExp('Employee ID:.*' + employeeId))).toBeVisible();
-  await expect(page.getByText('Business achievements and contributions to company / project success', {exact:true})).toBeVisible();
+  await expect(page.getByText('Most important achievements and contributions to company / project success', {exact:true})).toBeVisible();
 });
